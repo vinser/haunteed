@@ -37,6 +37,7 @@ type Model struct {
 	justArrived       bool // To prevent immediate floor transition
 	sb                *strings.Builder
 	fullVisibility    bool
+	paused            bool
 }
 
 // GhostTickMsg is a tick message.
@@ -130,6 +131,7 @@ func toggleVisibilityCmd(floorIndex int, isVisible bool) tea.Cmd {
 	}
 }
 
+// New returns a new play model.
 func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, initialVisibility bool) Model {
 	rng := rand.New(rand.NewSource(s.FloorSeeds[f.Index]))
 	ghosts := dweller.PlaceGhosts(f.Index, s.SpriteSize, s.GameMode, f.Maze.Width(), f.Maze.Height(), f.Maze.DenWidth(), f.Maze.DenHeight(), rng)
@@ -156,14 +158,26 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	// Handle pause/resume toggling first. This should work regardless of the paused state.
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// if msg == m.lastKeyMsg && time.Since(m.lastKeyTime) < 10*time.Millisecond {
-		// 	return m, nil
-		// }
-		// m.lastKeyMsg = msg
-		// m.lastKeyTime = time.Now()
+		switch msg.String() {
+		case "p": // Toggle pause
+			m.paused = !m.paused
+			if m.paused {
+				return m, nil // Game is paused, no more ticks
+			}
+			return m, tickGhosts() // Game is resumed, start ticking again
+		}
+	}
 
+	// If paused, ignore all other messages and updates.
+	if m.paused {
+		return m, nil
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
 		m.haunteed.HandleInput(msg)
 		m.haunteed.Move(m.floor)
 
@@ -300,7 +314,9 @@ func (m Model) View() string {
 
 	// Draw game header
 	header := ""
-	if m.state.GameMode != state.ModeCrazy {
+	if m.paused {
+		header = "\n\nPAUSED\n"
+	} else if m.state.GameMode != state.ModeCrazy {
 		header = fmt.Sprintf("Mode: %s  Floor: %d\nScore: %d  High Score: %d  Lives: %d\n",
 			m.state.GameMode,
 			m.floor.Index,
@@ -326,7 +342,7 @@ func (m Model) View() string {
 	m.renderView()
 
 	// Controls footer
-	m.sb.WriteString("\n← ↑ ↓ → — move, q — quit\n")
+	m.sb.WriteString("\n← ↑ ↓ → — move, p — pause/resume, q — quit\n")
 	return m.sb.String()
 }
 
