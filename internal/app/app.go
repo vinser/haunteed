@@ -132,6 +132,14 @@ func getFloor(index int, st *state.State, cache map[int]*floor.Floor, startPoint
 	f := floor.New(index, st.FloorSeeds[index], startPoint, endPoint, st.SpriteSize, st.GameMode, st.CrazyNight)
 
 	// Set floor visibility radius
+	setFloorVisibility(f, st)
+	cache[index] = f
+
+	return f
+}
+
+// Set floor visibility radius
+func setFloorVisibility(f *floor.Floor, st *state.State) {
 	litIntensity := ambilite.Intensity(time.Now(), st.LocationInfo.Lat, st.LocationInfo.Lon, st.LocationInfo.Timezone)
 	switch st.GameMode {
 	case state.ModeEasy, state.ModeNoisy:
@@ -139,7 +147,7 @@ func getFloor(index int, st *state.State, cache map[int]*floor.Floor, startPoint
 	case state.ModeCrazy:
 		switch st.CrazyNight {
 		case state.CrazyNightNever:
-			if index < 0 {
+			if f.Index < 0 {
 				f.VisibilityRadius = minFloorVisibilityRadius
 			} else {
 				f.VisibilityRadius = fullFloorVisibilityRadius
@@ -147,16 +155,13 @@ func getFloor(index int, st *state.State, cache map[int]*floor.Floor, startPoint
 		case state.CrazyNightAlways:
 			f.VisibilityRadius = minFloorVisibilityRadius
 		case state.CrazyNightReal:
-			if index < 0 {
+			if f.Index < 0 {
 				f.VisibilityRadius = minFloorVisibilityRadius
 			} else {
 				f.VisibilityRadius = minFloorVisibilityRadius + int(float64(fullFloorVisibilityRadius-minFloorVisibilityRadius)*litIntensity)
 			}
 		}
 	}
-	cache[index] = f
-
-	return f
 }
 
 func (m Model) Init() tea.Cmd {
@@ -244,6 +249,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.haunteed.SetHaunteedSprites(m.state.SpriteSize)
 			m.intro = intro.New(prevFloorIndex)
 		case play.RespawnMsg:
+			setFloorVisibility(m.floor, m.state)
 			m.status = statusRespawning
 			m.respawn = respawn.New(msg.Lives)
 		case play.GameOverMsg:
