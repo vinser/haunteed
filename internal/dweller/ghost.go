@@ -234,7 +234,7 @@ func (g *Ghost) NextPos() Position {
 }
 
 // MoveGhosts moves each ghost according to its state.
-func MoveGhosts(ghosts []*Ghost, l *floor.Floor, powerMode bool, htPos Position, htDir Direction) {
+func MoveGhosts(ghosts []*Ghost, f *floor.Floor, powerMode bool, htPos Position, htDir Direction) {
 	var curlyPos Position
 	for _, g := range ghosts {
 		if g.ghostType == Curly {
@@ -246,19 +246,19 @@ func MoveGhosts(ghosts []*Ghost, l *floor.Floor, powerMode bool, htPos Position,
 	for _, g := range ghosts {
 		switch g.State() {
 		case Frightened:
-			g.MoveRandom(l)
+			g.MoveRandom(f, ghosts)
 		case Eaten:
 			if g.Pos() == g.Home() {
 				if !powerMode {
 					g.SetState(Chase)
 				}
 			} else {
-				g.MoveToHome(l)
+				g.MoveToHome(f, ghosts)
 			}
 		case Chase,
 			Scatter:
 			target := g.targetPos(htPos, htDir, curlyPos)
-			g.moveToTarget(l, target)
+			g.moveToTarget(f, target, ghosts)
 		case Exiting:
 			if powerMode {
 				// Do nothing — ghost waits in den
@@ -270,25 +270,20 @@ func MoveGhosts(ghosts []*Ghost, l *floor.Floor, powerMode bool, htPos Position,
 			if g.Pos() == g.exitTarget {
 				g.SetState(Chase)
 			} else {
-				g.moveToTarget(l, g.exitTarget)
+				g.moveToTarget(f, g.exitTarget, ghosts)
 			}
 		}
 	}
 }
 
-// Move tries to move the ghost forward if not hitting a wall.
-func (g *Ghost) Move(l *floor.Floor) {
-	next := g.NextPos()
-
-	tile, err := l.ItemAt(next.X, next.Y)
-	if err == nil && tile != floor.Wall {
-		g.position = next
-	}
+// Move moves the ghost in its current direction.
+func (g *Ghost) Move() {
+	g.position = g.NextPos()
 }
 
 // MoveToHome moves the ghost one step closer to its home position.
-func (g *Ghost) MoveToHome(l *floor.Floor) {
-	g.moveToTarget(l, g.home)
+func (g *Ghost) MoveToHome(f *floor.Floor, allGhosts []*Ghost) {
+	g.moveToTarget(f, g.home, allGhosts)
 }
 
 func abs(x int) int {
@@ -303,13 +298,13 @@ func (g *Ghost) SetDirection(dir Direction) {
 	g.direction = dir
 }
 
-func (g *Ghost) MoveRandom(l *floor.Floor) {
+func (g *Ghost) MoveRandom(f *floor.Floor, allGhosts []*Ghost) {
 	// Directions excluding opposite
-	possible := g.validDirectionsExcludingOpposite(l)
+	possible := g.validDirectionsExcludingOpposite(f, allGhosts)
 
 	// If there are no valid directions excluding opposite try all
 	if len(possible) == 0 {
-		possible = g.validAllDirections(l)
+		possible = g.validAllDirections(f, allGhosts)
 	}
 
 	if len(possible) == 0 {
@@ -317,10 +312,10 @@ func (g *Ghost) MoveRandom(l *floor.Floor) {
 	}
 
 	g.direction = possible[g.rng.Intn(len(possible))]
-	g.Move(l)
+	g.Move()
 }
 
-func (g *Ghost) validDirectionsExcludingOpposite(l *floor.Floor) []Direction {
+func (g *Ghost) validDirectionsExcludingOpposite(f *floor.Floor, allGhosts []*Ghost) []Direction {
 	var dirs []Direction
 	opp := oppositeDirection(g.direction)
 
@@ -328,28 +323,45 @@ func (g *Ghost) validDirectionsExcludingOpposite(l *floor.Floor) []Direction {
 		if d == opp {
 			continue
 		}
-		if canMoveTo(g.position, d, l) {
+		if g.canMoveTo(g.position, d, f, allGhosts) {
 			dirs = append(dirs, d)
 		}
 	}
 	return dirs
 }
 
-func (g *Ghost) validAllDirections(l *floor.Floor) []Direction {
+func (g *Ghost) validAllDirections(f *floor.Floor, allGhosts []*Ghost) []Direction {
 	var dirs []Direction
 	for _, d := range []Direction{Up, Down, Left, Right} {
-		if canMoveTo(g.position, d, l) {
+		if g.canMoveTo(g.position, d, f, allGhosts) {
 			dirs = append(dirs, d)
 		}
 	}
 	return dirs
 }
 
-func canMoveTo(p Position, d Direction, l *floor.Floor) bool {
+// canMoveTo checks if a ghost can move to a new position.
+// It checks for walls and other ghosts.
+func (g *Ghost) canMoveTo(p Position, d Direction, f *floor.Floor, allGhosts []*Ghost) bool {
 	newPos := p.moveIn(d)
 
-	tile, err := l.ItemAt(newPos.X, newPos.Y)
-	return err == nil && tile != floor.Wall
+	// Check for walls
+	tile, err := f.ItemAt(newPos.X, newPos.Y)
+	if err != nil || tile == floor.Wall {
+		return false
+	}
+
+	// Check for other ghosts
+	for _, otherGhost := range allGhosts {
+		if g == otherGhost {
+			continue // Don't check against self
+		}
+		if otherGhost.Pos() == newPos {
+			return false // Another ghost is there
+		}
+	}
+
+	return true
 }
 
 func (p Position) moveIn(d Direction) Position {
@@ -420,18 +432,18 @@ func (g *Ghost) findBestDirections(target Position, validDirections []Direction)
 }
 
 // moveToTarget moves the ghost one step toward the target position.
-func (g *Ghost) moveToTarget(l *floor.Floor, target Position) {
+func (g *Ghost) moveToTarget(l *floor.Floor, target Position, allGhosts []*Ghost) {
 	// Find best directions, excluding reversing.
-	candidates := g.findBestDirections(target, g.validDirectionsExcludingOpposite(l))
+	candidates := g.findBestDirections(target, g.validDirectionsExcludingOpposite(l, allGhosts))
 
 	// Fallback if no valid direction excluding reverse
 	if len(candidates) == 0 {
-		candidates = g.findBestDirections(target, g.validAllDirections(l))
+		candidates = g.findBestDirections(target, g.validAllDirections(l, allGhosts))
 	}
 
 	if len(candidates) > 0 {
 		g.direction = candidates[g.rng.Intn(len(candidates))]
-		g.Move(l)
+		g.Move()
 	}
 }
 
