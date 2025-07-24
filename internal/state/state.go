@@ -14,19 +14,21 @@ import (
 	"time"
 
 	"github.com/denisbrodbeck/machineid"
+	"github.com/vinser/haunteed/internal/geoip"
 )
 
 // State holds persistent game data such as high scores.
 type State struct {
-	GameMode   string        `json:"game_mode"`   // Current game mode: easy, noisy or crazy
-	CrazyNight string        `json:"crazy_night"` // Night mode option for crazy mode: never, always or real
-	SpriteSize string        `json:"sprite_size"` // Sprite size: small, medium, large
-	Mute       bool          `json:"mute"`        // Mute all sounds
-	FloorSeeds map[int]int64 `json:"floor_seeds"` // Seed for each floor to reproduce the same sequence of mazes
-	EasyScore  int           `json:"easy_score"`  // Easy mode high score
-	NoisyScore int           `json:"noisy_score"` // Noisy mode high score
-	CrazyScore int           `json:"crazy_score"` // Crazy mode high score
-	TestScore  int           `json:"test_score"`  // Test mode high score
+	GameMode     string             `json:"game_mode"`     // Current game mode: easy, noisy or crazy
+	CrazyNight   string             `json:"crazy_night"`   // Night mode option for crazy mode: never, always or real
+	SpriteSize   string             `json:"sprite_size"`   // Sprite size: small, medium, large
+	Mute         bool               `json:"mute"`          // Mute all sounds
+	FloorSeeds   map[int]int64      `json:"floor_seeds"`   // Seed for each floor to reproduce the same sequence of mazes
+	EasyScore    int                `json:"easy_score"`    // Easy mode high score
+	NoisyScore   int                `json:"noisy_score"`   // Noisy mode high score
+	CrazyScore   int                `json:"crazy_score"`   // Crazy mode high score
+	TestScore    int                `json:"test_score"`    // Test mode high score
+	LocationInfo geoip.LocationInfo `json:"location_info"` // Location information
 }
 
 const (
@@ -116,6 +118,17 @@ func (s *State) Save() error {
 	return os.WriteFile(path, encrypted, 0644)
 }
 
+var fallBackLocation = &geoip.LocationInfo{
+	Continent: "Europe",
+	Country:   "The Netherlands",
+	City:      "Amsterdam",
+	Lat:       52.3728,
+	Lon:       4.88805,
+	Timezone:  "Europe/Amsterdam",
+	IP:        "193.0.11.51",
+	TimeStamp: time.Now(),
+}
+
 func New() *State {
 	path, err := getSavePath()
 	if err == nil {
@@ -123,10 +136,17 @@ func New() *State {
 	}
 	seeds := make(map[int]int64)
 	seeds[0] = time.Now().UnixNano()
+
+	geoip.SetCacheTTL(0)
+	loc, err := geoip.GetLocationInfo()
+	if err != nil {
+		loc = fallBackLocation
+	}
 	return &State{
-		GameMode:   ModeDefault,
-		FloorSeeds: seeds,
-		SpriteSize: SpriteDefault,
+		GameMode:     ModeDefault,
+		FloorSeeds:   seeds,
+		SpriteSize:   SpriteDefault,
+		LocationInfo: *loc,
 	}
 }
 

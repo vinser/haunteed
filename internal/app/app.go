@@ -1,9 +1,11 @@
 package app
 
 import (
+	"math"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/vinser/haunteed/internal/ambilite"
 	"github.com/vinser/haunteed/internal/dweller"
 
 	"github.com/vinser/haunteed/internal/flags"
@@ -108,9 +110,13 @@ func setSplash(st *state.State) splash.Model {
 	}
 }
 
+const minFloorVisibilityRadius = 4
+
+var fullFloorVisibilityRadius = int(math.Sqrt(float64(floor.Width*floor.Width + floor.Height*floor.Height))) // Floor diagonal length
+
 func getFloor(index int, st *state.State, cache map[int]*floor.Floor, startPoint, endPoint *maze.Point) *floor.Floor {
 	if f, ok := cache[index]; ok {
-		// A floor is regenerated if the required connection points do not match the cached version.
+		// A floor is regenerated if the required connection points (upstairs or downstairs) do not match the cached version.
 		// This ensures that returning to a floor from a different direction connects correctly.
 		startMismatch := startPoint != nil && f.Maze.Start() != *startPoint
 		endMismatch := endPoint != nil && f.Maze.End() != *endPoint
@@ -125,7 +131,31 @@ func getFloor(index int, st *state.State, cache map[int]*floor.Floor, startPoint
 	}
 	f := floor.New(index, st.FloorSeeds[index], startPoint, endPoint, st.SpriteSize, st.GameMode, st.CrazyNight)
 
+	// Set floor visibility radius
+	litIntensity := ambilite.Intensity(time.Now(), st.LocationInfo.Lat, st.LocationInfo.Lon, st.LocationInfo.Timezone)
+	switch st.GameMode {
+	case state.ModeEasy, state.ModeNoisy:
+		f.VisibilityRadius = fullFloorVisibilityRadius
+	case state.ModeCrazy:
+		switch st.CrazyNight {
+		case state.CrazyNightNever:
+			if index < 0 {
+				f.VisibilityRadius = minFloorVisibilityRadius
+			} else {
+				f.VisibilityRadius = fullFloorVisibilityRadius
+			}
+		case state.CrazyNightAlways:
+			f.VisibilityRadius = minFloorVisibilityRadius
+		case state.CrazyNightReal:
+			if index < 0 {
+				f.VisibilityRadius = minFloorVisibilityRadius
+			} else {
+				f.VisibilityRadius = minFloorVisibilityRadius + int(float64(fullFloorVisibilityRadius-minFloorVisibilityRadius)*litIntensity)
+			}
+		}
+	}
 	cache[index] = f
+
 	return f
 }
 

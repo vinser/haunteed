@@ -33,17 +33,18 @@ type Floor struct {
 	GhostTickInterval time.Duration
 	Sprites           map[ItemType][]string
 	DimFuseSprite     []string
+	VisibilityRadius  int
 }
 
 const (
 	// Maze settings
-	width  = 21
-	height = 15
+	Width  = 21
+	Height = 15
 	// Ghosts' den size
-	denWidth  = 5
-	denHeight = 3
-
-	bias = 0.2
+	DenWidth  = 5
+	DenHeight = 3
+	// Maze generation Bias difines maze complexity
+	Bias = 0.2
 )
 
 // New initializes a new floor with its configuration and dot count.
@@ -53,17 +54,17 @@ func New(index int, seed int64, startPoint, endPoint *maze.Point, spriteSize, ga
 		seed = int64(index)
 	}
 	rng := rand.New(rand.NewSource(seed))
-	m, err := maze.New(width, height, denWidth, denHeight)
+	m, err := maze.New(Width, Height, DenWidth, DenHeight)
 	if err != nil {
 		log.Fatal(err)
 	}
-	m.Generate(seed, startPoint, endPoint, nil, "top", bias)
+	m.Generate(seed, startPoint, endPoint, nil, "top", Bias)
 
 	items := newItems(m)
 
 	solution, ok := m.Solve()
 	if !ok {
-		log.Fatalf("no solution for width=%d, height=%d, denWidth=%d, denHeight=%d, seed=%d", width, height, denWidth, denHeight, seed)
+		log.Fatalf("no solution for width=%d, height=%d, denWidth=%d, denHeight=%d, seed=%d", Width, Height, DenWidth, DenHeight, seed)
 	}
 	solution = solution[1 : len(solution)-1]
 	items = placeDots(items, solution)

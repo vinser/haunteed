@@ -190,7 +190,7 @@ func (m Model) View() string {
 
 	options := []option{{"Game mode", m.mode}}
 	if m.mode == state.ModeCrazy {
-		options = append(options, option{"Night mode", m.crazyNight})
+		options = append(options, option{"Night lighting", m.crazyNight})
 	}
 	options = append(options, option{"Sprite size", m.spriteSize})
 	options = append(options, option{"Mute all sounds", fmt.Sprintf("%v", m.mute)})

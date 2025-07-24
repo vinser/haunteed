@@ -287,7 +287,7 @@ func distance(a, b dweller.Position) int {
 }
 
 const (
-	defaultVisibilityRadius = 4
+	minVisibilityRadius = 4
 )
 
 var (
@@ -309,7 +309,8 @@ func (m Model) View() string {
 			m.haunteed.Lives(),
 		)
 	} else {
-		header = fmt.Sprintf("Mode: %s, Night: %s  Floor: %d\nScore: %d  High Score: %d  Lives: %d\n",
+		header = fmt.Sprintf("Latitude: %.4f, Longitude: %.4f, Timezone: %s\n", m.state.LocationInfo.Lat, m.state.LocationInfo.Lon, m.state.LocationInfo.Timezone)
+		header += fmt.Sprintf("Mode: %s, Night: %s  Floor: %d\nScore: %d  High Score: %d  Lives: %d\n",
 			m.state.GameMode,
 			m.state.CrazyNight,
 			m.floor.Index,
@@ -336,9 +337,13 @@ func (m *Model) renderView() {
 	g := m.ghosts
 
 	// In "Crazy" mode, basement floors are always dark.
-	// Upper floors are dark only if "Night" option is enabled.
+	// If "CrazyNight" is set to "never", upper floors are always lit.
+	// Upper floors are dark only if "CrazyNight" option is set to "always" or "real".
+	// If "CrazyNight" is set to "always", the upper floor is always dark.
+	// If "CrazyNight" is set to "real", the upper floor is dark only during the real night,
+	// in dawn and dusk it is lit but has reduced visibility and in daylight it is fully lit.
 	isCrazyMode := m.state.GameMode == state.ModeCrazy
-	isLimitedVisibilityActive := isCrazyMode && (m.floor.Index < 0 || m.state.CrazyNight == "always" || m.state.CrazyNight == "real")
+	isLimitedVisibilityActive := isCrazyMode && (m.floor.Index < 0 || m.state.CrazyNight == state.CrazyNightAlways || m.state.CrazyNight == state.CrazyNightReal)
 	htPos := h.Pos()
 
 	// Create a map of dweller positions to their rendered sprites for efficient lookup.
@@ -355,9 +360,7 @@ func (m *Model) renderView() {
 		for x := 0; x < f.Maze.Width(); x++ {
 			var sprite []string
 			pos := dweller.Position{X: x, Y: y}
-
-			// if isLimitedVisibilityActive && !m.fullVisibility && manhattan(pos, htPos) > defaultVisibilityRadius {
-			if isLimitedVisibilityActive && !m.fullVisibility && distance(pos, htPos) > defaultVisibilityRadius {
+			if isLimitedVisibilityActive && !m.fullVisibility && distance(pos, htPos) > m.floor.VisibilityRadius {
 				sprite = f.Sprites[floor.Empty]
 			} else {
 				if sp, ok := dwellerSprites[pos]; ok {

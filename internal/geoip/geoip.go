@@ -10,14 +10,14 @@ import (
 
 // LocationInfo stores geographic data and timezone.
 type LocationInfo struct {
-	Continent string  `json:"continent"`
-	Country   string  `json:"country"`
-	City      string  `json:"city"`
-	Lat       float64 `json:"lat"`
-	Lon       float64 `json:"lon"`
-	Timezone  string  `json:"timezone"`
-	IP        string  `json:"query"`
-	timeStamp time.Time
+	Continent string    `json:"continent"`
+	Country   string    `json:"country"`
+	City      string    `json:"city"`
+	Lat       float64   `json:"lat"`
+	Lon       float64   `json:"lon"`
+	Timezone  string    `json:"timezone"`
+	IP        string    `json:"query"`
+	TimeStamp time.Time `json:"-"`
 }
 
 // geoipClient is used to store configuration and cache.
@@ -59,7 +59,7 @@ func (c *geoipClient) GetLocationInfo() (*LocationInfo, error) {
 	defer c.mu.Unlock()
 
 	// Return cached data if it is not expired
-	if c.cache != nil && time.Since(c.cacheTime) < c.cacheTTL {
+	if c.cache != nil && time.Since(c.cacheTime) <= c.cacheTTL {
 		return c.cache, nil
 	}
 
