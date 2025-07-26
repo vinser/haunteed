@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	frightenedPeriod = 10 * time.Second
+	frightenedPeriod    = 10 * time.Second
+	autoRepeatThreshold = 100 * time.Millisecond // Anticheat
 )
 
 type Model struct {
@@ -178,6 +179,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Distinguish between a real key press and an auto-repeat.
+		// An auto-repeat event is just the same key coming in very fast.
+		isAutoRepeat := msg.Type == m.lastKeyMsg.Type &&
+			msg.String() == m.lastKeyMsg.String() &&
+			time.Since(m.lastKeyTime) < autoRepeatThreshold
+
+		// Update last key press info for the next event.
+		m.lastKeyMsg = msg
+		m.lastKeyTime = time.Now()
+
+		if isAutoRepeat {
+			return m, nil // Ignore auto-repeat events
+		}
+
 		m.haunteed.HandleInput(msg)
 		m.haunteed.Move(m.floor)
 
@@ -328,7 +343,7 @@ func (m Model) View() string {
 		header = fmt.Sprintf("Latitude: %.4f, Longitude: %.4f, Timezone: %s\n", m.state.LocationInfo.Lat, m.state.LocationInfo.Lon, m.state.LocationInfo.Timezone)
 		header += fmt.Sprintf("Mode: %s, Night: %s  Floor: %d\nScore: %d  High Score: %d  Lives: %d\n",
 			m.state.GameMode,
-			m.state.CrazyNight,
+			m.state.NightOption,
 			m.floor.Index,
 			m.score.Get(),
 			m.score.GetHigh(),
@@ -359,7 +374,7 @@ func (m *Model) renderView() {
 	// If "CrazyNight" is set to "real", the upper floor is dark only during the real night,
 	// in dawn and dusk it is lit but has reduced visibility and in daylight it is fully lit.
 	isCrazyMode := m.state.GameMode == state.ModeCrazy
-	isLimitedVisibilityActive := isCrazyMode && (m.floor.Index < 0 || m.state.CrazyNight == state.CrazyNightAlways || m.state.CrazyNight == state.CrazyNightReal)
+	isLimitedVisibilityActive := isCrazyMode && (m.floor.Index < 0 || m.state.NightOption == state.NightAlways || m.state.NightOption == state.NightReal)
 	htPos := h.Pos()
 
 	// Create a map of dweller positions to their rendered sprites for efficient lookup.
