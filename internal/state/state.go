@@ -118,7 +118,7 @@ func (s *State) Save() error {
 	return os.WriteFile(path, encrypted, 0644)
 }
 
-var fallBackLocation = &geoip.LocationInfo{
+var fallbackLocation = &geoip.LocationInfo{
 	Continent: "Europe",
 	Country:   "The Netherlands",
 	City:      "Amsterdam",
@@ -140,7 +140,7 @@ func New() *State {
 	geoip.SetCacheTTL(0)
 	loc, err := geoip.GetLocationInfo()
 	if err != nil {
-		loc = fallBackLocation
+		loc = fallbackLocation
 	}
 	return &State{
 		GameMode:     ModeDefault,
