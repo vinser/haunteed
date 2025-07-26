@@ -20,7 +20,7 @@ import (
 // State holds persistent game data such as high scores.
 type State struct {
 	GameMode     string             `json:"game_mode"`     // Current game mode: easy, noisy or crazy
-	CrazyNight   string             `json:"crazy_night"`   // Night mode option for crazy mode: never, always or real
+	NightOption  string             `json:"crazy_night"`   // Night option for crazy mode: never, always or real
 	SpriteSize   string             `json:"sprite_size"`   // Sprite size: small, medium, large
 	Mute         bool               `json:"mute"`          // Mute all sounds
 	FloorSeeds   map[int]int64      `json:"floor_seeds"`   // Seed for each floor to reproduce the same sequence of mazes
@@ -39,11 +39,11 @@ const (
 	ModeTest    = "test"
 	ModeDefault = ModeEasy
 
-	// Crazy night options
-	CrazyNightNever   = "never"
-	CrazyNightAlways  = "always"
-	CrazyNightReal    = "real"
-	CrazyNightDefault = CrazyNightNever
+	// Night options
+	NightNever   = "never"
+	NightAlways  = "always"
+	NightReal    = "real"
+	NightDefault = NightNever
 
 	// Sprite sizes
 	SpriteSmall   = "small"

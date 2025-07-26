@@ -9,19 +9,19 @@ import (
 
 // Flags stores the parsed command-line options
 type Flags struct {
-	Mode       string
-	CrazyNight string
-	SpriteSize string
-	Mute       bool
-	Reset      bool
+	Mode   string
+	Night  string
+	Sprite string
+	Mute   bool
+	Reset  bool
 }
 
 // Parse parses command-line flags and returns the resulting config
 func Parse() (*Flags, bool) {
 	// Custom flag variables
 	var mode string
-	var crazyNight string
-	var spriteSize string
+	var night string
+	var sprite string
 	var mute bool
 	var reset bool
 
@@ -29,9 +29,9 @@ func Parse() (*Flags, bool) {
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 	// Define flags with both short and long forms
-	fs.StringVar(&mode, "mode", "", "Game mode: easy, noisy, or crazy")
-	fs.StringVar(&crazyNight, "crazy-night", "", "Select night option for crazy mode: never, always or real")
-	fs.StringVar(&spriteSize, "sprite-size", "", "Sprite size: small, medium, or large")
+	fs.StringVar(&mode, "mode", "easy", "Game mode: easy, noisy, or crazy")
+	fs.StringVar(&night, "crazy-night", "", "Select night option for crazy mode: never, always or real")
+	fs.StringVar(&sprite, "sprite-size", "medium", "Sprite size: small, medium, or large")
 	fs.BoolVar(&mute, "mute", false, "Mute all sounds")
 	fs.BoolVar(&reset, "reset", false, "Reset saved progress and settings")
 
@@ -57,40 +57,40 @@ func Parse() (*Flags, bool) {
 	// Normalize mode value
 	mode = strings.ToLower(mode)
 	if mode != "easy" && mode != "noisy" && mode != "crazy" && mode != "test" {
-		fmt.Fprintf(os.Stderr, "Invalid mode: %s. Use 'easy', 'noisy', or 'crazy'.\n", mode)
+		fmt.Fprintf(os.Stderr, "Invalid game mode: %s. Use 'easy', 'noisy', or 'crazy'.\n", mode)
 		fs.Usage()
 		os.Exit(1)
 	}
 
 	// Normalize crazy-night value
 	if mode != "crazy" {
-		if crazyNight != "" {
-			fmt.Fprintf(os.Stderr, "Crazy night option is only valid for 'crazy' mode.\n")
+		if night != "" {
+			fmt.Fprintf(os.Stderr, "Night option is only valid for 'crazy' mode.\n")
 			fs.Usage()
 			os.Exit(1)
 		}
 	} else {
-		crazyNight = strings.ToLower(crazyNight)
-		if crazyNight != "never" && crazyNight != "always" && crazyNight != "real" {
-			fmt.Fprintf(os.Stderr, "Invalid crazyNight: %s. Use 'never', 'always', or 'real'.\n", crazyNight)
+		night = strings.ToLower(night)
+		if night != "never" && night != "always" && night != "real" {
+			fmt.Fprintf(os.Stderr, "Invalid night option: %s. Use 'never', 'always', or 'real'.\n", night)
 			fs.Usage()
 			os.Exit(1)
 		}
 	}
 
 	// Normalize sprite size value
-	spriteSize = strings.ToLower(spriteSize)
-	if spriteSize != "" && spriteSize != "small" && spriteSize != "medium" && spriteSize != "large" {
-		fmt.Fprintf(os.Stderr, "Invalid sprite-size: %s. Use 'small', 'medium' or 'large'.\n", spriteSize)
+	sprite = strings.ToLower(sprite)
+	if sprite != "" && sprite != "small" && sprite != "medium" && sprite != "large" {
+		fmt.Fprintf(os.Stderr, "Invalid sprite size: %s. Use 'small', 'medium' or 'large'.\n", sprite)
 		fs.Usage()
 		os.Exit(1)
 	}
 
 	return &Flags{
-		Mode:       mode,
-		CrazyNight: crazyNight,
-		SpriteSize: spriteSize,
-		Mute:       mute,
-		Reset:      reset,
+		Mode:   mode,
+		Night:  night,
+		Sprite: sprite,
+		Mute:   mute,
+		Reset:  reset,
 	}, true
 }

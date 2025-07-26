@@ -87,11 +87,11 @@ func getState() *state.State {
 		if fl.Mode != "" && fl.Mode != st.GameMode {
 			st.GameMode = fl.Mode
 		}
-		if fl.CrazyNight != "" {
-			st.CrazyNight = fl.CrazyNight
+		if fl.Night != "" {
+			st.NightOption = fl.Night
 		}
-		if fl.SpriteSize != "" {
-			st.SpriteSize = fl.SpriteSize
+		if fl.Sprite != "" {
+			st.SpriteSize = fl.Sprite
 		}
 	}
 	return st
@@ -129,7 +129,7 @@ func getFloor(index int, st *state.State, cache map[int]*floor.Floor, startPoint
 	if _, ok := st.FloorSeeds[index]; !ok {
 		st.FloorSeeds[index] = time.Now().UnixNano()
 	}
-	f := floor.New(index, st.FloorSeeds[index], startPoint, endPoint, st.SpriteSize, st.GameMode, st.CrazyNight)
+	f := floor.New(index, st.FloorSeeds[index], startPoint, endPoint, st.SpriteSize, st.GameMode, st.NightOption)
 
 	// Set floor visibility radius
 	setFloorVisibility(f, st)
@@ -145,16 +145,16 @@ func setFloorVisibility(f *floor.Floor, st *state.State) {
 	case state.ModeEasy, state.ModeNoisy:
 		f.VisibilityRadius = fullFloorVisibilityRadius
 	case state.ModeCrazy:
-		switch st.CrazyNight {
-		case state.CrazyNightNever:
+		switch st.NightOption {
+		case state.NightNever:
 			if f.Index < 0 {
 				f.VisibilityRadius = minFloorVisibilityRadius
 			} else {
 				f.VisibilityRadius = fullFloorVisibilityRadius
 			}
-		case state.CrazyNightAlways:
+		case state.NightAlways:
 			f.VisibilityRadius = minFloorVisibilityRadius
-		case state.CrazyNightReal:
+		case state.NightReal:
 			if f.Index < 0 {
 				f.VisibilityRadius = minFloorVisibilityRadius
 			} else {
@@ -189,7 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case splash.MakeSettingsMsg:
 			m.status = statusDoSettings
-			m.setup = setup.New(m.state.GameMode, m.state.CrazyNight, m.state.SpriteSize, m.state.Mute)
+			m.setup = setup.New(m.state.GameMode, m.state.NightOption, m.state.SpriteSize, m.state.Mute)
 		case splash.TimedoutMsg:
 			m.status = statusGameplay
 			m.resetPlayModel()
@@ -206,7 +206,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.state.GameMode = msg.Mode
 				m.state.Mute = msg.Mute
-				m.state.CrazyNight = msg.CrazyNight
+				m.state.NightOption = msg.CrazyNight
 			}
 			// Reset for a new game
 			m.floorCache = make(map[int]*floor.Floor)
