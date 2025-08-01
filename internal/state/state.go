@@ -9,12 +9,15 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/crc32"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/denisbrodbeck/machineid"
+	"github.com/faiface/beep"
 	"github.com/vinser/haunteed/internal/geoip"
+	"github.com/vinser/haunteed/internal/sound"
 )
 
 // State holds persistent game data such as high scores.
@@ -29,6 +32,8 @@ type State struct {
 	CrazyScore   int                `json:"crazy_score"`   // Crazy mode high score
 	TestScore    int                `json:"test_score"`    // Test mode high score
 	LocationInfo geoip.LocationInfo `json:"location_info"` // Location information
+	// Sounds       map[string]sound.Sound `json:"-"`             // Map of loaded sounds
+	SoundManager *sound.Manager `json:"-"` //
 }
 
 const (
@@ -142,11 +147,26 @@ func New() *State {
 	if err != nil {
 		loc = fallbackLocation
 	}
+	mute := false
+	// sounds, err := sound.LoadSamples()
+	if err != nil {
+		mute = true
+	}
+	soundMgr, err := sound.NewManager(sound.CommonSampleRate)
+	if err != nil {
+		log.Fatalf("Failed to initialize sound manager: %v", err)
+	}
+	if err := soundMgr.LoadSamples(); err != nil {
+		log.Fatalf("Failed to load samples: %v", err)
+	}
 	return &State{
 		GameMode:     ModeDefault,
 		FloorSeeds:   seeds,
 		SpriteSize:   SpriteDefault,
+		Mute:         mute,
 		LocationInfo: *loc,
+		// Sounds:       sounds,
+		SoundManager: soundMgr,
 	}
 }
 
@@ -180,6 +200,14 @@ func Load() *State {
 		return New() // Corrupted JSON
 	}
 
+	// s.Sounds, _ = sound.LoadSamples()
+	mgr, err := sound.NewManager(beep.SampleRate(44100))
+	if err != nil {
+		log.Fatalf("Failed to initialize sound manager: %v", err)
+	}
+	if err := mgr.LoadSamples(); err != nil {
+		log.Fatalf("Failed to load samples: %v", err)
+	}
 	return s
 }
 

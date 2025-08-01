@@ -13,6 +13,7 @@ import (
 	"github.com/vinser/haunteed/internal/dweller"
 	floor "github.com/vinser/haunteed/internal/floor"
 	"github.com/vinser/haunteed/internal/score"
+	"github.com/vinser/haunteed/internal/sound"
 	"github.com/vinser/haunteed/internal/state"
 	"github.com/vinser/haunteed/internal/style"
 )
@@ -179,6 +180,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// sound.ClearSpeaker()
 		// Distinguish between a real key press and an auto-repeat.
 		// An auto-repeat event is just the same key coming in very fast.
 		isAutoRepeat := msg.Type == m.lastKeyMsg.Type &&
@@ -206,6 +208,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			} else {
 				m.score.Add(10)
 			}
+			// sound.Play(m.state.Sounds[sound.CHOMP])
+			m.state.SoundManager.Play(sound.CHOMP)
 		case floor.PowerPellet:
 			m.score.Add(50)
 			m.powerMode = true
