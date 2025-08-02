@@ -1,4 +1,4 @@
-package intro
+package next
 
 import (
 	"fmt"
@@ -7,11 +7,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const introPeriod = 3 * time.Second
+const nextPeriod = 3 * time.Second
 
 type Model struct {
-	index      int
-	introUntil time.Time
+	index     int
+	nextUntil time.Time
 }
 
 // TickMsg is a tick message.
@@ -33,8 +33,8 @@ func timedoutCmd() tea.Cmd {
 
 func New(index int) Model {
 	return Model{
-		index:      index,
-		introUntil: time.Now().Add(introPeriod),
+		index:     index,
+		nextUntil: time.Now().Add(nextPeriod),
 	}
 }
 
@@ -43,7 +43,7 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if time.Now().After(m.introUntil) {
+	if time.Now().After(m.nextUntil) {
 		return m, timedoutCmd()
 	}
 	return m, tick()
