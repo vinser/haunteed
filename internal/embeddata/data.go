@@ -5,7 +5,7 @@ import (
 	"io/fs"
 )
 
-//go:embed config.yml sounds.zip
+//go:embed sounds.zip
 var embeddedFS embed.FS
 
 // FS returns the embedded filesystem with access to config.yml amd sounds.zip.
