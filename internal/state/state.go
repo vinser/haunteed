@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/crc32"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -48,7 +47,7 @@ const (
 	NightNever   = "never"
 	NightAlways  = "always"
 	NightReal    = "real"
-	NightDefault = NightNever
+	NightDefault = NightReal
 
 	// Sprite sizes
 	SpriteSmall   = "small"
@@ -148,24 +147,20 @@ func New() *State {
 		loc = fallbackLocation
 	}
 	mute := false
-	// sounds, err := sound.LoadSamples()
+	soundMgr, err := sound.NewManager(sound.CommonSampleRate)
 	if err != nil {
 		mute = true
 	}
-	soundMgr, err := sound.NewManager(sound.CommonSampleRate)
-	if err != nil {
-		log.Fatalf("Failed to initialize sound manager: %v", err)
-	}
-	if err := soundMgr.LoadSamples(); err != nil {
-		log.Fatalf("Failed to load samples: %v", err)
+	if err = soundMgr.LoadSamples(); err != nil {
+		mute = true
 	}
 	return &State{
 		GameMode:     ModeDefault,
-		FloorSeeds:   seeds,
+		NightOption:  NightDefault,
 		SpriteSize:   SpriteDefault,
 		Mute:         mute,
+		FloorSeeds:   seeds,
 		LocationInfo: *loc,
-		// Sounds:       sounds,
 		SoundManager: soundMgr,
 	}
 }
@@ -196,17 +191,16 @@ func Load() *State {
 	}
 
 	// Unmarshal into the current state struct
-	if err := json.Unmarshal(payload, s); err != nil {
+	if err = json.Unmarshal(payload, s); err != nil {
 		return New() // Corrupted JSON
 	}
 
-	// s.Sounds, _ = sound.LoadSamples()
-	mgr, err := sound.NewManager(beep.SampleRate(44100))
+	s.SoundManager, err = sound.NewManager(beep.SampleRate(44100))
 	if err != nil {
-		log.Fatalf("Failed to initialize sound manager: %v", err)
+		s.Mute = true
 	}
-	if err := mgr.LoadSamples(); err != nil {
-		log.Fatalf("Failed to load samples: %v", err)
+	if err := s.SoundManager.LoadSamples(); err != nil {
+		s.Mute = true
 	}
 	return s
 }
