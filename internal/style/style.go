@@ -8,12 +8,18 @@ import (
 
 var (
 	// General UI
-	SplashDot      = lipgloss.NewStyle().Foreground(lipgloss.Color("220")) // Yellowish
+	SplashDot      = lipgloss.NewStyle().Foreground(lipgloss.Color("255")) // Bright white
 	SplashHaunteed = lipgloss.NewStyle().Foreground(lipgloss.Color("226")) // Bright yellow
+	SplashGhosts   = []lipgloss.Style{
+		lipgloss.NewStyle().Foreground(lipgloss.Color("9")),  // Bright red
+		lipgloss.NewStyle().Foreground(lipgloss.Color("13")), // Bright magenta
+		lipgloss.NewStyle().Foreground(lipgloss.Color("14")), // Bright cyan
+		lipgloss.NewStyle().Foreground(lipgloss.Color("10")), // Bright green
+	}
 
-	SetupTitle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("228"))
+	SetupTitle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("228")) // Bright yellow
 	SetupItem         = lipgloss.NewStyle()
-	SetupItemSelected = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+	SetupItemSelected = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true) // Bright magenta
 
 	PlayHeader = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("82")) // Green
 

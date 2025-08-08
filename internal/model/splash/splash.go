@@ -38,41 +38,41 @@ const (
                   
 `
 	curly = `
-▄█████▄           
-██                
-██▄▄▄▄▄ CURLY     
- ▀▀▀▀▀ ▄▄▄▄▄▄ 
- CURLY ██▀▀▀██ 
-       ██████▀ 
-       ██  ▀█▄
+  ▄█████▄           
+  ██                
+  ██▄▄▄▄▄ CURLY     
+   ▀▀▀▀▀ ▄▄▄▄▄▄ 
+   CURLY ██▀▀▀██ 
+         ██████▀ 
+         ██  ▀█▄
 `
 	lofty = `
-██              
-██               
-██▄▄▄▄ LOFTY   
-▀▀▀▀▀▀ ▄▄▄▄▄▄  
- LOFTY ██▀▀▀▀  
-       █████   
-       ██      
+  ██              
+  ██               
+  ██▄▄▄▄ LOFTY   
+  ▀▀▀▀▀▀ ▄▄▄▄▄▄  
+   LOFTY ██▀▀▀▀  
+         █████   
+         ██      
 `
 	fluffy = `
-██████          
-██▄▄▄            
-██▀▀▀ FLUFFY  
-▀▀     ▄▄▄▄▄▄
-FLUFFY ██▀▀▀▀  
-       █████
-       ██      
+  ██████          
+  ██▄▄▄            
+  ██▀▀▀ FLUFFY  
+  ▀▀     ▄▄▄▄▄▄
+  FLUFFY ██▀▀▀▀  
+         █████
+         ██      
 `
 
 	virty = `
-██   ██        
-██   ██          
- ██▄██  VIRTY   
-  ▀█▀  ▄▄▄▄▄▄  
- VIRTY ▀▀██▀▀  
-         ██    
-         ██    
+  ██   ██        
+  ██   ██          
+   ██▄██  VIRTY   
+    ▀█▀  ▄▄▄▄▄▄  
+   VIRTY ▀▀██▀▀  
+           ██    
+           ██    
 `
 )
 
@@ -81,7 +81,7 @@ const (
 	spriteHeight = 7
 
 	middlePause      = 3 * time.Second
-	moveTickDuration = 100 * time.Millisecond
+	moveTickDuration = 50 * time.Millisecond
 	chewTickDuration = 500 * time.Millisecond
 )
 
@@ -319,16 +319,36 @@ func (m *Model) clearGrid() {
 	}
 }
 
-func (m *Model) ghostY(ghostIdx int) int {
+func (m *Model) ghostY(ghostIdx int, ghostPos int) int {
 	switch ghostIdx {
 	case 0: // Curly (top)
 		return 0
-	case 3: // Virty (bottom)
+	case 1: // Lofty (top to bottom)
+		// Moves from top (0) to bottom (height - spriteHeight - 1)
+		maxY := m.height - spriteHeight - 1
+		progress := float64(ghostPos+spriteWidth) / float64(m.width+spriteWidth)
+		if progress < 0 {
+			progress = 0
+		}
+		if progress > 1 {
+			progress = 1
+		}
+		return int(progress * float64(maxY))
+	case 2: // Fluffy (bottom to top)
+		// Moves from bottom (height - spriteHeight - 1) to top (0)
+		maxY := m.height - spriteHeight - 1
+		progress := float64(ghostPos+spriteWidth) / float64(m.width+spriteWidth)
+		if progress < 0 {
+			progress = 0
+		}
+		if progress > 1 {
+			progress = 1
+		}
+		return int((1.0 - progress) * float64(maxY))
+	case 3: // Virty (bottom, one line up)
 		return m.height - spriteHeight - 1
-	default: // Lofty, Fluffy (evenly spaced)
-		// Spread evenly between top and bottom
-		steps := len(ghostSprites) - 1
-		return (ghostIdx * (m.height - spriteHeight)) / steps
+	default:
+		return (m.height - spriteHeight) / 2
 	}
 }
 
@@ -343,7 +363,7 @@ func (m *Model) drawDots() {
 }
 
 func (m *Model) drawGhost(ghostIdx, ghostPos int) {
-	spriteY := m.ghostY(ghostIdx)
+	spriteY := m.ghostY(ghostIdx, ghostPos)
 	spriteLines := strings.Split(ghostSprites[ghostIdx], "\n")
 	for i, line := range spriteLines {
 		y := spriteY + i
