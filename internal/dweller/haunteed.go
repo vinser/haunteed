@@ -95,13 +95,13 @@ func (p *Haunteed) Move(l *floor.Floor) {
 // HandleInput updates Haunteed's direction based on user input.
 func (p *Haunteed) HandleInput(msg tea.KeyMsg) {
 	switch msg.String() {
-	case "up", "w":
+	case "up", "w", "W":
 		p.direction = Up
-	case "down", "s":
+	case "down", "s", "S":
 		p.direction = Down
-	case "left", "a":
+	case "left", "a", "A":
 		p.direction = Left
-	case "right", "d":
+	case "right", "d", "D":
 		p.direction = Right
 	default:
 		p.direction = No
