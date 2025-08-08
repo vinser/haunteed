@@ -28,9 +28,9 @@ func Parse() (*Flags, bool) {
 	fs := NewFlagSetWithVisit()
 
 	// Define flags with both short and long forms
-	fs.StringVar(&mode, "game-mode", "g", "easy", "Game mode: easy (default), noisy, or crazy")
-	fs.StringVar(&night, "night-option", "n", "real", "Night option for crazy mode: never, always or real (default)")
-	fs.StringVar(&sprite, "sprite-size", "s", "medium", "Sprite size: small, medium (default), or large")
+	fs.StringVar(&mode, "game-mode", "g", "", "Game mode: easy (default), noisy, or crazy")
+	fs.StringVar(&night, "night-option", "n", "", "Night option for crazy mode: never, always or real (default)")
+	fs.StringVar(&sprite, "sprite-size", "s", "", "Sprite size: small, medium (default), or large")
 	fs.BoolVar(&mute, "mute", "m", false, "Mute all sounds")
 	fs.BoolVar(&reset, "reset", "r", false, "Reset saved progress and settings")
 
@@ -49,28 +49,16 @@ func Parse() (*Flags, bool) {
 			fs.Usage()
 			os.Exit(1)
 		}
-	} else {
-		mode = ""
 	}
 
 	// Normalize crazy-night value
 	if fs.IsCustom("night-option") {
-		if mode != "crazy" {
-			if night != "" {
-				fmt.Fprintf(os.Stderr, "Night option is only valid with the 'crazy' game mode.\n")
-				fs.Usage()
-				os.Exit(1)
-			}
-		} else {
-			night = strings.ToLower(night)
-			if night != "never" && night != "always" && night != "real" {
-				fmt.Fprintf(os.Stderr, "Invalid night option: %s. Use 'never', 'always', or 'real'.\n", night)
-				fs.Usage()
-				os.Exit(1)
-			}
+		night = strings.ToLower(night)
+		if night != "never" && night != "always" && night != "real" {
+			fmt.Fprintf(os.Stderr, "Invalid night option: %s. Use 'never', 'always', or 'real'.\n", night)
+			fs.Usage()
+			os.Exit(1)
 		}
-	} else {
-		night = ""
 	}
 
 	// Normalize sprite size value
@@ -81,8 +69,6 @@ func Parse() (*Flags, bool) {
 			fs.Usage()
 			os.Exit(1)
 		}
-	} else {
-		sprite = ""
 	}
 
 	return &Flags{
