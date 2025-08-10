@@ -130,9 +130,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 					// Toggle mute
 					m.mute = !m.mute
 				case 3:
-					if m.mode == state.ModeCrazy {
-						m.reset = !m.reset
-					}
+					m.reset = !m.reset
 				}
 
 			}
