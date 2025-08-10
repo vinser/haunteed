@@ -347,7 +347,7 @@ func (g *Ghost) canMoveTo(p Position, d Direction, f *floor.Floor, allGhosts []*
 
 	// Check for walls
 	tile, err := f.ItemAt(newPos.X, newPos.Y)
-	if err != nil || tile == floor.Wall {
+	if err != nil || tile == floor.Wall || tile == floor.CrumblingWall {
 		return false
 	}
 

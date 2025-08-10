@@ -1,16 +1,16 @@
 package app
 
 import (
-	"math"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vinser/haunteed/internal/ambilite"
 	"github.com/vinser/haunteed/internal/dweller"
+	"github.com/vinser/haunteed/internal/sound"
 
 	"github.com/vinser/haunteed/internal/flags"
-	floor "github.com/vinser/haunteed/internal/floor"
-	"github.com/vinser/haunteed/internal/model/intro"
+	"github.com/vinser/haunteed/internal/floor"
+	"github.com/vinser/haunteed/internal/model/next"
 	"github.com/vinser/haunteed/internal/model/over"
 	"github.com/vinser/haunteed/internal/model/play"
 	"github.com/vinser/haunteed/internal/model/quit"
@@ -46,7 +46,7 @@ type Model struct {
 	splash  splash.Model
 	setup   setup.Model
 	play    play.Model
-	intro   intro.Model
+	next    next.Model
 	respawn respawn.Model
 	over    over.Model
 	quit    quit.Model
@@ -55,7 +55,7 @@ type Model struct {
 func New() Model {
 	state := getState()
 	splash := setSplash(state)
-
+	state.SoundManager.PlayLoop(sound.INTRO)
 	floorCache := make(map[int]*floor.Floor)
 	initialFloor := getFloor(0, state, floorCache, nil, nil)
 	startPos := dweller.Position{X: initialFloor.Maze.Start().X, Y: initialFloor.Maze.Start().Y}
@@ -84,7 +84,7 @@ func getState() *state.State {
 		if fl.Mute {
 			st.Mute = true
 		}
-		if fl.Mode != "" && fl.Mode != st.GameMode {
+		if fl.Mode != "" {
 			st.GameMode = fl.Mode
 		}
 		if fl.Night != "" {
@@ -98,21 +98,21 @@ func getState() *state.State {
 }
 
 func setSplash(st *state.State) splash.Model {
+	var s splash.Model
 	switch st.SpriteSize {
 	case "small":
-		return splash.New(21, 15)
+		s = splash.New(st, 21, 15)
 	case "medium":
-		return splash.New(43, 15)
+		s = splash.New(st, 47, 15)
 	case "large":
-		return splash.New(85, 31)
+		s = splash.New(st, 85, 31)
 	default:
-		return splash.New(43, 15)
+		s = splash.New(st, 47, 15)
 	}
+	return s
 }
 
 const minFloorVisibilityRadius = 4
-
-var fullFloorVisibilityRadius = int(math.Sqrt(float64(floor.Width*floor.Width + floor.Height*floor.Height))) // Floor diagonal length
 
 func getFloor(index int, st *state.State, cache map[int]*floor.Floor, startPoint, endPoint *maze.Point) *floor.Floor {
 	if f, ok := cache[index]; ok {
@@ -143,14 +143,14 @@ func setFloorVisibility(f *floor.Floor, st *state.State) {
 	litIntensity := ambilite.Intensity(time.Now(), st.LocationInfo.Lat, st.LocationInfo.Lon, st.LocationInfo.Timezone)
 	switch st.GameMode {
 	case state.ModeEasy, state.ModeNoisy:
-		f.VisibilityRadius = fullFloorVisibilityRadius
+		f.VisibilityRadius = floor.FullFloorVisibilityRadius
 	case state.ModeCrazy:
 		switch st.NightOption {
 		case state.NightNever:
 			if f.Index < 0 {
 				f.VisibilityRadius = minFloorVisibilityRadius
 			} else {
-				f.VisibilityRadius = fullFloorVisibilityRadius
+				f.VisibilityRadius = floor.FullFloorVisibilityRadius
 			}
 		case state.NightAlways:
 			f.VisibilityRadius = minFloorVisibilityRadius
@@ -158,7 +158,7 @@ func setFloorVisibility(f *floor.Floor, st *state.State) {
 			if f.Index < 0 {
 				f.VisibilityRadius = minFloorVisibilityRadius
 			} else {
-				f.VisibilityRadius = minFloorVisibilityRadius + int(float64(fullFloorVisibilityRadius-minFloorVisibilityRadius)*litIntensity)
+				f.VisibilityRadius = minFloorVisibilityRadius + int(float64(floor.FullFloorVisibilityRadius-minFloorVisibilityRadius)*litIntensity)
 			}
 		}
 	}
@@ -190,9 +190,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case splash.MakeSettingsMsg:
 			m.status = statusDoSettings
 			m.setup = setup.New(m.state.GameMode, m.state.NightOption, m.state.SpriteSize, m.state.Mute)
+			m.state.SoundManager.StopListed(sound.INTRO)
 		case splash.TimedoutMsg:
 			m.status = statusGameplay
 			m.resetPlayModel()
+			m.state.SoundManager.StopListed(sound.INTRO)
 		default:
 			m.splash, cmd = m.splash.Update(msg)
 		}
@@ -235,7 +237,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.haunteed.SetPos(dweller.Position{X: startPoint.X, Y: startPoint.Y})
 			m.haunteed.SetHome(dweller.Position{X: startPoint.X, Y: startPoint.Y})
 			m.haunteed.SetHaunteedSprites(m.state.SpriteSize)
-			m.intro = intro.New(nextFloorIndex)
+			m.next = next.New(nextFloorIndex)
 		case play.PrevFloorMsg:
 			m.status = statusFloorIntro
 			prevFloorIndex := m.floor.Index - 1
@@ -247,7 +249,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			startPoint := m.floor.Maze.Start()
 			m.haunteed.SetHome(dweller.Position{X: startPoint.X, Y: startPoint.Y})
 			m.haunteed.SetHaunteedSprites(m.state.SpriteSize)
-			m.intro = intro.New(prevFloorIndex)
+			m.next = next.New(prevFloorIndex)
 		case play.RespawnMsg:
 			setFloorVisibility(m.floor, m.state)
 			m.status = statusRespawning
@@ -264,11 +266,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case statusFloorIntro:
 		switch msg := msg.(type) {
-		case intro.TimedoutMsg:
+		case next.TimedoutMsg:
 			m.resetPlayModel()
 			m.status = statusGameplay
 		default:
-			m.intro, cmd = m.intro.Update(msg)
+			m.next, cmd = m.next.Update(msg)
 		}
 		cmds = append(cmds, cmd)
 	case statusRespawning:
@@ -309,7 +311,7 @@ func (m Model) View() string {
 	case statusGameplay:
 		return m.play.View()
 	case statusFloorIntro:
-		return m.intro.View()
+		return m.next.View()
 	case statusRespawning:
 		return m.respawn.View()
 	case statusGameOver:

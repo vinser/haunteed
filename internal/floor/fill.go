@@ -152,6 +152,40 @@ func placeFuse(items [][]ItemType, m *maze.Maze, rng *rand.Rand) [][]ItemType {
 	return items
 }
 
+// placeCrumblingWalls finds suitable wall locations and converts them to CrumblingWall type.
+func placeCrumblingWalls(items [][]ItemType, m *maze.Maze, rng *rand.Rand, requested int) [][]ItemType {
+	var candidates []maze.Point
+
+	// Iterate over internal maze cells to find candidate walls.
+	for y := 1; y < Height-1; y++ {
+		for x := 1; x < Width-1; x++ {
+			// A candidate must be a wall.
+			if items[y][x] != Wall {
+				continue
+			}
+
+			// Check for horizontal shortcut potential (path above and below).
+			if items[y-1][x] != Wall && items[y+1][x] != Wall {
+				candidates = append(candidates, maze.Point{X: x, Y: y})
+				continue // Move to next cell to avoid adding same point twice
+			}
+
+			// Check for vertical shortcut potential (path left and right).
+			if items[y][x-1] != Wall && items[y][x+1] != Wall {
+				candidates = append(candidates, maze.Point{X: x, Y: y})
+			}
+		}
+	}
+
+	// Randomly select from candidates to place crumbling walls.
+	rng.Shuffle(len(candidates), func(i, j int) { candidates[i], candidates[j] = candidates[j], candidates[i] })
+	for i := 0; i < requested && i < len(candidates); i++ {
+		p := candidates[i]
+		items[p.Y][p.X] = CrumblingWall
+	}
+	return items
+}
+
 // Manhattan distance between two points.
 func manhattan(x1, y1, x2, y2 int) int {
 	return abs(x1-x2) + abs(y1-y2)

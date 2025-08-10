@@ -41,6 +41,7 @@ var RGBColor = map[string]RGB{
 	"cyan":    {0, 255, 255},
 	"white":   {255, 255, 255},
 	"grey":    {128, 128, 128},
+	"brown":   {165, 42, 42},
 }
 
 // GenerateHexColor generates hexadcimal string for a given RGB values. r, g, b sould be in the range 0-255

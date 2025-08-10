@@ -3,6 +3,7 @@ package floor
 import (
 	"errors"
 	"log"
+	"math"
 	"math/rand"
 	"time"
 
@@ -17,6 +18,7 @@ type ItemType int
 
 const (
 	Wall ItemType = iota
+	CrumblingWall
 	Dot
 	Empty
 	PowerPellet
@@ -47,6 +49,8 @@ const (
 	Bias = 0.2
 )
 
+var FullFloorVisibilityRadius = int(math.Sqrt(float64(Width*Width + Height*Height))) // Floor diagonal length
+
 // New initializes a new floor with its configuration and dot count.
 func New(index int, seed int64, startPoint, endPoint *maze.Point, spriteSize, gameMode, crazyNight string) *Floor {
 	// If no seed is provided, the behavior will be deterministic for a given index.
@@ -74,6 +78,8 @@ func New(index int, seed int64, startPoint, endPoint *maze.Point, spriteSize, ga
 	if gameMode == state.ModeCrazy {
 		items = placeFuse(items, m, rng)
 	}
+	// Place crumbling walls
+	items = placeCrumblingWalls(items, m, rng, 5) // 5 crumbling walls per floor
 
 	sprites, dimFuseSprite := setFloorSprites(index, spriteSize, gameMode)
 	return &Floor{
@@ -107,6 +113,14 @@ func (f *Floor) EatItem(x, y int) ItemType {
 	return originalTile
 }
 
+// BreakWall changes a crumbling wall into an empty space.
+func (f *Floor) BreakWall(x, y int) {
+	if x < 0 || x >= f.Maze.Width() || y < 0 || y >= f.Maze.Height() {
+		return
+	}
+	f.Items[y][x] = Empty
+}
+
 // RenderAt renders the tile at the specified coordinates using the given sprite size.
 func (f *Floor) RenderAt(x, y int) []string {
 	item, _ := f.ItemAt(x, y)
@@ -120,13 +134,14 @@ func (f *Floor) RenderAt(x, y int) []string {
 
 func setFloorSprites(floorNum int, spriteSize, gameMode string) (map[ItemType][]string, []string) {
 	var sprites = map[ItemType][]string{
-		Wall:        nil,
-		Dot:         nil,
-		PowerPellet: nil,
-		Start:       nil,
-		End:         nil,
-		Fuse:        nil,
-		Empty:       nil,
+		Wall:          nil,
+		CrumblingWall: nil,
+		Dot:           nil,
+		PowerPellet:   nil,
+		Start:         nil,
+		End:           nil,
+		Fuse:          nil,
+		Empty:         nil,
 	}
 	var dimFuseSprite []string
 
@@ -156,6 +171,8 @@ func getFloorItemStyle(floorNum int, item ItemType) (brightStyle, dimStyle lipgl
 	switch item {
 	case Wall:
 		color = style.RGBColor["white"]
+	case CrumblingWall:
+		color = style.RGBColor["grey"]
 	case Dot:
 		color = style.RGBColor["white"]
 	case PowerPellet:
@@ -185,6 +202,8 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 	case state.SpriteSmall:
 		switch item {
 		case Wall:
+			return []string{"▒"}
+		case CrumblingWall:
 			return []string{"░"}
 		case Dot:
 			if mode == state.ModeNoisy {
@@ -206,6 +225,8 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 		switch item {
 		case Wall:
 			return []string{"▒▒"}
+		case CrumblingWall:
+			return []string{"░░"}
 		case Dot:
 			if mode == state.ModeNoisy {
 				return []string{"  "}
@@ -225,6 +246,8 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 	case state.SpriteLarge:
 		switch item {
 		case Wall:
+			return []string{"▒▒▒▒", "▒▒▒▒"}
+		case CrumblingWall:
 			return []string{"░░░░", "░░░░"}
 		case Dot:
 			if mode == state.ModeNoisy {

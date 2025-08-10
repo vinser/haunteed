@@ -3,9 +3,7 @@ package dweller
 import (
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/vinser/haunteed/internal/floor"
 	"github.com/vinser/haunteed/internal/state"
 	"github.com/vinser/haunteed/internal/style"
 )
@@ -82,19 +80,9 @@ func (p *Haunteed) NextPos() Position {
 	return pos
 }
 
-// Move attempts to move Haunteed if the next tile is not a wall.
-func (p *Haunteed) Move(l *floor.Floor) {
-	next := p.NextPos()
-
-	tile, err := l.ItemAt(next.X, next.Y)
-	if err == nil && tile != floor.Wall {
-		p.position = next
-	}
-}
-
 // HandleInput updates Haunteed's direction based on user input.
-func (p *Haunteed) HandleInput(msg tea.KeyMsg) {
-	switch msg.String() {
+func (p *Haunteed) HandleInput(key string) {
+	switch key {
 	case "up", "w", "W":
 		p.direction = Up
 	case "down", "s", "S":
