@@ -10,10 +10,10 @@ import (
 
 // newItems creates a new items grid and fills it with walls from the maze.
 func newItems(m *maze.Maze) [][]ItemType {
-	items := make([][]ItemType, Height)
-	for y := 0; y < Height; y++ {
-		items[y] = make([]ItemType, Width)
-		for x := 0; x < Width; x++ {
+	items := make([][]ItemType, m.Height())
+	for y := 0; y < m.Height(); y++ {
+		items[y] = make([]ItemType, m.Width())
+		for x := 0; x < m.Width(); x++ {
 			cell, ok := m.Cell(x, y)
 			if !ok {
 				continue
@@ -42,8 +42,8 @@ func placeDots(items [][]ItemType, solution []maze.Point) [][]ItemType {
 	for _, p := range solution {
 		solutionPoints[p] = true
 	}
-	for y := 0; y < Height; y++ {
-		for x := 0; x < Width; x++ {
+	for y := 0; y < len(items); y++ {
+		for x := 0; x < len(items[y]); x++ {
 			if items[y][x] == Empty && solutionPoints[maze.Point{X: x, Y: y}] {
 				items[y][x] = Dot
 			}
@@ -56,8 +56,8 @@ func placeDots(items [][]ItemType, solution []maze.Point) [][]ItemType {
 // at maximum distance from the maze center and between them.
 func placePowerPellets(items [][]ItemType, m *maze.Maze, requested int) [][]ItemType {
 	var candidates []maze.Point
-	for y := 0; y < Height; y++ {
-		for x := 0; x < Width; x++ {
+	for y := 0; y < m.Height(); y++ {
+		for x := 0; x < m.Width(); x++ {
 			// Candidates for power pellets are empty points outside the den.
 			if items[y][x] == Empty && !m.IsInsideDen(maze.Point{X: x, Y: y}) {
 				candidates = append(candidates, maze.Point{X: x, Y: y})
@@ -73,7 +73,7 @@ func placePowerPellets(items [][]ItemType, m *maze.Maze, requested int) [][]Item
 		requested = len(candidates)
 	}
 
-	mazeCenter := maze.Point{X: Width / 2, Y: Height / 2}
+	mazeCenter := maze.Point{X: m.Width() / 2, Y: m.Height() / 2}
 	var pelletLocations []maze.Point
 
 	// 1. Place the first pellet: farthest from the maze center.
@@ -135,8 +135,8 @@ func placePowerPellets(items [][]ItemType, m *maze.Maze, requested int) [][]Item
 // placeFuse places a single fuse at a random empty location.
 func placeFuse(items [][]ItemType, m *maze.Maze, rng *rand.Rand) [][]ItemType {
 	var candidates []maze.Point
-	for y := 0; y < Height; y++ {
-		for x := 0; x < Width; x++ {
+	for y := 0; y < m.Height(); y++ {
+		for x := 0; x < m.Width(); x++ {
 			// Candidates for fuse are empty points outside the den.
 			if items[y][x] == Empty && !m.IsInsideDen(maze.Point{X: x, Y: y}) {
 				candidates = append(candidates, maze.Point{X: x, Y: y})
@@ -157,8 +157,8 @@ func placeCrumblingWalls(items [][]ItemType, m *maze.Maze, rng *rand.Rand, reque
 	var candidates []maze.Point
 
 	// Iterate over internal maze cells to find candidate walls.
-	for y := 1; y < Height-1; y++ {
-		for x := 1; x < Width-1; x++ {
+	for y := 1; y < m.Height()-1; y++ {
+		for x := 1; x < m.Width()-1; x++ {
 			// A candidate must be a wall.
 			if items[y][x] != Wall {
 				continue

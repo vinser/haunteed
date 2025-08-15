@@ -157,7 +157,7 @@ func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, f
 }
 
 func (m Model) shouldPlayFuseSound() bool {
-	isLimitedVisibilityFloor := m.floor.VisibilityRadius < floor.FullFloorVisibilityRadius
+	isLimitedVisibilityFloor := m.floor.VisibilityRadius < m.floor.FullVisibilityRadius()
 	return m.state.GameMode == state.ModeCrazy && !m.fullVisibility && isLimitedVisibilityFloor
 }
 

@@ -38,10 +38,11 @@ type Floor struct {
 	VisibilityRadius  int
 }
 
+func (f *Floor) FullVisibilityRadius() int {
+	return int(math.Sqrt(float64(f.Maze.Width()*f.Maze.Width() + f.Maze.Height()*f.Maze.Height())))
+}
+
 const (
-	// Maze settings
-	Width  = 21
-	Height = 15
 	// Ghosts' den size
 	DenWidth  = 5
 	DenHeight = 3
@@ -49,16 +50,25 @@ const (
 	Bias = 0.2
 )
 
-var FullFloorVisibilityRadius = int(math.Sqrt(float64(Width*Width + Height*Height))) // Floor diagonal length
-
 // New initializes a new floor with its configuration and dot count.
 func New(index int, seed int64, startPoint, endPoint *maze.Point, spriteSize, gameMode, crazyNight string) *Floor {
+	// Determine maze dimensions based on game mode
+	var width, height int
+	switch gameMode {
+	case state.ModeNoisy:
+		width, height = 31, 21
+	case state.ModeCrazy:
+		width, height = 41, 25
+	default: // state.ModeEasy
+		width, height = 21, 15
+	}
+
 	// If no seed is provided, the behavior will be deterministic for a given index.
 	if seed == 0 {
 		seed = int64(index)
 	}
 	rng := rand.New(rand.NewSource(seed))
-	m, err := maze.New(Width, Height, DenWidth, DenHeight)
+	m, err := maze.New(width, height, DenWidth, DenHeight)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,18 +78,26 @@ func New(index int, seed int64, startPoint, endPoint *maze.Point, spriteSize, ga
 
 	solution, ok := m.Solve()
 	if !ok {
-		log.Fatalf("no solution for width=%d, height=%d, denWidth=%d, denHeight=%d, seed=%d", Width, Height, DenWidth, DenHeight, seed)
+		log.Fatalf("no solution for width=%d, height=%d, denWidth=%d, denHeight=%d, seed=%d", width, height, DenWidth, DenHeight, seed)
 	}
 	solution = solution[1 : len(solution)-1]
 	items = placeDots(items, solution)
-	pelNum := rng.Intn(2) + 4 // 4-5 power pellets per floor
-	items = placePowerPellets(items, m, pelNum)
+
+	// Scale item counts based on maze area
+	baseArea := 21.0 * 15.0
+	currentArea := float64(width * height)
+	scaleFactor := currentArea / baseArea
+
+	pelletCount := int(math.Max(4, float64(rng.Intn(2)+4)*scaleFactor))
+	items = placePowerPellets(items, m, pelletCount)
+
 	// In "Crazy" mode, a fuse is placed on every floor.
 	if gameMode == state.ModeCrazy {
 		items = placeFuse(items, m, rng)
 	}
-	// Place crumbling walls
-	items = placeCrumblingWalls(items, m, rng, 5) // 5 crumbling walls per floor
+
+	crumblingWallCount := int(math.Max(5, float64(5)*scaleFactor))
+	items = placeCrumblingWalls(items, m, rng, crumblingWallCount)
 
 	sprites, dimFuseSprite := setFloorSprites(index, spriteSize, gameMode)
 	return &Floor{

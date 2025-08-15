@@ -148,14 +148,14 @@ func setFloorVisibility(f *floor.Floor, st *state.State) {
 	litIntensity := ambilite.Intensity(time.Now(), st.LocationInfo.Lat, st.LocationInfo.Lon, st.LocationInfo.Timezone)
 	switch st.GameMode {
 	case state.ModeEasy, state.ModeNoisy:
-		f.VisibilityRadius = floor.FullFloorVisibilityRadius
+		f.VisibilityRadius = f.FullVisibilityRadius()
 	case state.ModeCrazy:
 		switch st.NightOption {
 		case state.NightNever:
 			if f.Index < 0 {
 				f.VisibilityRadius = minFloorVisibilityRadius
 			} else {
-				f.VisibilityRadius = floor.FullFloorVisibilityRadius
+				f.VisibilityRadius = f.FullVisibilityRadius()
 			}
 		case state.NightAlways:
 			f.VisibilityRadius = minFloorVisibilityRadius
@@ -163,7 +163,7 @@ func setFloorVisibility(f *floor.Floor, st *state.State) {
 			if f.Index < 0 {
 				f.VisibilityRadius = minFloorVisibilityRadius
 			} else {
-				f.VisibilityRadius = minFloorVisibilityRadius + int(float64(floor.FullFloorVisibilityRadius-minFloorVisibilityRadius)*litIntensity)
+				f.VisibilityRadius = minFloorVisibilityRadius + int(float64(f.FullVisibilityRadius()-minFloorVisibilityRadius)*litIntensity)
 			}
 		}
 	}
