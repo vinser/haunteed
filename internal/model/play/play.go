@@ -2,7 +2,6 @@ package play
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"strings"
@@ -90,17 +89,13 @@ func prevFloorCmd(floor int) tea.Cmd {
 // This message is used to display the game over screen and handle any necessary cleanup or state updates.
 // It contains the game mode, current score, and high score.
 type GameOverMsg struct {
-	Mode      string
-	Score     int
-	HighScore int
+	Score int
 }
 
-func gameOverCmd(mode string, score int, highScore int) tea.Cmd {
+func gameOverCmd(score int) tea.Cmd {
 	return func() tea.Msg {
 		return GameOverMsg{
-			Mode:      mode,
-			Score:     score,
-			HighScore: highScore,
+			Score: score,
 		}
 	}
 }
@@ -134,11 +129,11 @@ func toggleVisibilityCmd(floorIndex int, isVisible bool) tea.Cmd {
 }
 
 // New returns a new play model.
-func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, initialVisibility bool) Model {
+func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, floorVisibility bool) Model {
 	rng := rand.New(rand.NewSource(s.FloorSeeds[f.Index]))
 	ghosts := dweller.PlaceGhosts(f.Index, s.SpriteSize, s.GameMode, f.Maze.Width(), f.Maze.Height(), f.Maze.DenWidth(), f.Maze.DenHeight(), rng)
 	ghostTick := f.GhostTickInterval
-	return Model{
+	m := Model{
 		state:             s,
 		floor:             f,
 		score:             sc,
@@ -151,8 +146,19 @@ func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, i
 		ghostTickInterval: ghostTick,
 		justArrived:       true,
 		sb:                &strings.Builder{},
-		fullVisibility:    initialVisibility,
+		fullVisibility:    floorVisibility,
 	}
+
+	if m.shouldPlayFuseSound() {
+		m.state.SoundManager.PlayLoopWithVolume(sound.FUSE_ARC, 2)
+	}
+
+	return m
+}
+
+func (m Model) shouldPlayFuseSound() bool {
+	isLimitedVisibilityFloor := m.floor.VisibilityRadius < floor.FullFloorVisibilityRadius
+	return m.state.GameMode == state.ModeCrazy && !m.fullVisibility && isLimitedVisibilityFloor
 }
 
 func (m Model) Init() tea.Cmd {
@@ -167,7 +173,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "p": // Toggle pause
 			m.paused = !m.paused
 			if m.paused {
+				m.state.SoundManager.PlayLoopWithVolume(sound.PAUSE_GAME, 0)
 				return m, nil // Game is paused, no more ticks
+			} else {
+				m.state.SoundManager.StopListed(sound.PAUSE_GAME)
 			}
 			return m, tickGhosts() // Game is resumed, start ticking again
 		}
@@ -195,8 +204,30 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil // Ignore auto-repeat events
 		}
 
-		m.haunteed.HandleInput(msg)
-		m.haunteed.Move(m.floor)
+		m.haunteed.HandleInput(msg.String())
+
+		nextPos := m.haunteed.NextPos()
+		if m.haunteed.Dir() != dweller.No {
+			tile, err := m.floor.ItemAt(nextPos.X, nextPos.Y)
+			canMove := false
+			if err == nil {
+				if tile == floor.CrumblingWall {
+					if m.powerMode {
+						m.floor.BreakWall(nextPos.X, nextPos.Y)
+						m.state.SoundManager.Play(sound.WALL_BREAK)
+						canMove = true
+					}
+				} else if tile != floor.Wall {
+					canMove = true
+				}
+			}
+			if canMove {
+				m.haunteed.SetPos(nextPos)
+				m.state.SoundManager.Play(sound.STEP_CREAKY)
+			} else {
+				m.state.SoundManager.Play(sound.STEP_BUMP)
+			}
+		}
 
 		pos := m.haunteed.Pos()
 		tile := m.floor.EatItem(pos.X, pos.Y)
@@ -208,9 +239,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			} else {
 				m.score.Add(10)
 			}
-			// sound.Play(m.state.Sounds[sound.CHOMP])
-			m.state.SoundManager.Play(sound.CHOMP)
+			m.state.SoundManager.PlayWithVolume(sound.PICK_CRUMB, -1.5)
 		case floor.PowerPellet:
+			m.state.SoundManager.Play(sound.EAT_PELLET)
 			m.score.Add(50)
 			m.powerMode = true
 			m.powerModeUntil = time.Now().Add(frightenedPeriod)
@@ -220,6 +251,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		case floor.Fuse:
 			m.fullVisibility = !m.fullVisibility
+			m.state.SoundManager.Play(sound.FUSE_TOGGLE)
+			if m.shouldPlayFuseSound() {
+				m.state.SoundManager.PlayLoopWithVolume(sound.FUSE_ARC, 2)
+			} else {
+				m.state.SoundManager.StopListed(sound.FUSE_ARC)
+			}
 			return m, toggleVisibilityCmd(m.floor.Index, m.fullVisibility)
 		case floor.Start:
 			if !m.justArrived {
@@ -263,19 +300,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if htPos == g.Pos() {
 			switch g.State() {
 			case dweller.Frightened: // eat the ghost
+				m.state.SoundManager.Play(sound.KILL_GHOST)
 				m.score.AddGhostPoints()
 				g.SetState(dweller.Eaten)
 			case dweller.Chase: // lose a life
 				m.haunteed.LoseLife()
 				if m.haunteed.IsDead() { // game over
 					score := m.score.Get()
-					highScore := m.state.GetHighScore()
-					if err := m.state.UpdateAndSave(m.floor.Index, score, m.floor.Seed); err != nil {
-						log.Fatal(err)
-					}
-					return m, gameOverCmd(m.state.GameMode, score, highScore)
+					return m, gameOverCmd(score)
 				}
 				// enter respawn mode
+				m.state.SoundManager.PlayWithVolume(sound.LOSE_LIFE, 2)
 				return m, respawnCmd(m.haunteed.Lives())
 			}
 		}
@@ -371,14 +406,6 @@ func (m *Model) renderView() {
 	h := m.haunteed
 	g := m.ghosts
 
-	// In "Crazy" mode, basement floors are always dark.
-	// If "CrazyNight" is set to "never", upper floors are always lit.
-	// Upper floors are dark only if "CrazyNight" option is set to "always" or "real".
-	// If "CrazyNight" is set to "always", the upper floor is always dark.
-	// If "CrazyNight" is set to "real", the upper floor is dark only during the real night,
-	// in dawn and dusk it is lit but has reduced visibility and in daylight it is fully lit.
-	isCrazyMode := m.state.GameMode == state.ModeCrazy
-	isLimitedVisibilityActive := isCrazyMode && (m.floor.Index < 0 || m.state.NightOption == state.NightAlways || m.state.NightOption == state.NightReal)
 	htPos := h.Pos()
 
 	// Create a map of dweller positions to their rendered sprites for efficient lookup.
@@ -395,17 +422,24 @@ func (m *Model) renderView() {
 		for x := 0; x < f.Maze.Width(); x++ {
 			var sprite []string
 			pos := dweller.Position{X: x, Y: y}
-			if isLimitedVisibilityActive && !m.fullVisibility && distance(pos, htPos) > m.floor.VisibilityRadius {
+			if m.notVisible(pos, htPos) {
 				sprite = f.Sprites[floor.Empty]
 			} else {
 				if sp, ok := dwellerSprites[pos]; ok {
 					sprite = sp
 				} else {
 					item, _ := f.ItemAt(x, y)
-					if item == floor.Fuse && !m.fullVisibility {
+					if item == floor.CrumblingWall {
+						if m.powerMode {
+							sprite = f.Sprites[floor.CrumblingWall]
+						} else {
+							// Render as a normal wall when not in power mode
+							sprite = f.Sprites[floor.Wall]
+						}
+					} else if item == floor.Fuse && !m.fullVisibility {
 						sprite = f.DimFuseSprite
 					} else {
-						sprite = f.RenderAt(x, y)
+						sprite = f.Sprites[item]
 					}
 				}
 			}
@@ -421,4 +455,17 @@ func (m *Model) renderView() {
 			m.sb.WriteRune('\n')
 		}
 	}
+}
+
+// notVisible checks if the sprite is not visible to the haunteed.
+// In "Crazy" mode, basement floors are always dark.
+// If "NightOption" is set to "never", upper floors are always lit.
+// Upper floors are dark only if "NightOption" option is set to "always" or "real".
+// If "NightOption" is set to "always", the upper floor is always dark.
+// If "NightOption" is set to "real", the upper floor is dark only during the real night,
+// in dawn and dusk it is lit but has reduced visibility and in daylight it is fully lit.
+func (m Model) notVisible(spritePos, hauntedPos dweller.Position) bool {
+	isLimitedVisibilityActive := (m.state.GameMode == state.ModeCrazy) && (m.floor.Index < 0 || m.state.NightOption == state.NightAlways || m.state.NightOption == state.NightReal)
+	return isLimitedVisibilityActive && !m.fullVisibility && distance(spritePos, hauntedPos) > m.floor.VisibilityRadius
+
 }

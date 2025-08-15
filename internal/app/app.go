@@ -1,11 +1,13 @@
 package app
 
 import (
+	"log"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vinser/haunteed/internal/ambilite"
 	"github.com/vinser/haunteed/internal/dweller"
+	"github.com/vinser/haunteed/internal/geoip"
 	"github.com/vinser/haunteed/internal/sound"
 
 	"github.com/vinser/haunteed/internal/flags"
@@ -53,6 +55,9 @@ type Model struct {
 }
 
 func New() Model {
+	// Configure global settings first to ensure consistent behavior.
+	geoip.SetCacheTTL(0) // Ensure fresh location data for new sessions.
+
 	state := getState()
 	splash := setSplash(state)
 	state.SoundManager.PlayLoop(sound.INTRO)
@@ -82,7 +87,7 @@ func getState() *state.State {
 		}
 
 		if fl.Mute {
-			st.Mute = true
+			st.SetMute(true)
 		}
 		if fl.Mode != "" {
 			st.GameMode = fl.Mode
@@ -178,8 +183,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q": // quit all app models
 			m.status = statusQuitting // Set status to show quit message
 			return m, tea.Quit
-		case "m":
-			m.state.Mute = !m.state.Mute
+		case "m": // mute/unmute
+			m.state.SetMute(!m.state.Mute)
 			return m, nil
 		}
 	}
@@ -207,18 +212,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = state.New()
 			} else {
 				m.state.GameMode = msg.Mode
-				m.state.Mute = msg.Mute
 				m.state.NightOption = msg.CrazyNight
+				m.state.SetMute(msg.Mute)
 			}
-			// Reset for a new game
-			m.floorCache = make(map[int]*floor.Floor)
-			m.floorVisibility = make(map[int]bool)
-			m.floor = getFloor(0, m.state, m.floorCache, nil, nil)
-			startPos := dweller.Position{X: m.floor.Maze.Start().X, Y: m.floor.Maze.Start().Y}
-			m.haunteed = dweller.PlaceHaunteed(m.state.SpriteSize, startPos)
-			m.score.Reset()
-			m.score.SetHigh(m.state.GetHighScore())
-			m.resetPlayModel()
+			m.resetForNewGame()
 		case setup.DiscardSettingsMsg:
 			m.status = statusGameplay
 			m.resetPlayModel()
@@ -229,6 +226,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusGameplay:
 		switch msg := msg.(type) {
 		case play.NextFloorMsg:
+			m.state.SoundManager.Play(sound.TRANSITION_UP)
 			m.status = statusFloorIntro
 			nextFloorIndex := m.floor.Index + 1
 			prevFloorEndPoint := m.floor.Maze.End()
@@ -239,6 +237,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.haunteed.SetHaunteedSprites(m.state.SpriteSize)
 			m.next = next.New(nextFloorIndex)
 		case play.PrevFloorMsg:
+			m.state.SoundManager.Play(sound.TRANSITION_DOWN)
 			m.status = statusFloorIntro
 			prevFloorIndex := m.floor.Index - 1
 			currentFloorStartPoint := m.floor.Maze.Start()
@@ -256,7 +255,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.respawn = respawn.New(msg.Lives)
 		case play.GameOverMsg:
 			m.status = statusGameOver
-			m.over = over.New(msg.Mode, msg.Score, msg.HighScore)
+			score := msg.Score
+			highScore := m.state.GetHighScore() // Get high score before update
+			if err := m.state.UpdateAndSave(m.floor.Index, score, m.floor.Seed); err != nil {
+				log.Fatal(err)
+			}
+			if score > highScore {
+				m.state.SoundManager.PlayWithCallback(sound.HIGH_SCORE, func() {
+					m.state.SoundManager.PlayLoop(sound.INTRO)
+				})
+			} else {
+				m.state.SoundManager.PlayWithCallback(sound.GAME_OVER, func() {
+					m.state.SoundManager.PlayLoop(sound.INTRO)
+				})
+			}
+			// Pass the *old* high score to the 'over' model for correct message display
+			m.over = over.New(m.state.GameMode, score, highScore)
 		case play.VisibilityToggledMsg:
 			m.floorVisibility[msg.FloorIndex] = msg.IsVisible
 			return m, nil // State updated, no further action needed
@@ -283,10 +297,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, cmd)
 	case statusGameOver:
-		m.over, cmd = m.over.Update(msg)
+		switch msg := msg.(type) {
+		case over.PlayAgainMsg:
+			m.state.SoundManager.StopListed(sound.INTRO)
+			m.resetForNewGame()
+		case over.QuitGameMsg:
+			m.status = statusQuitting
+			m.state.SoundManager.StopListed(sound.INTRO)
+			return m, tea.Quit
+		default:
+			m.over, cmd = m.over.Update(msg)
+		}
 		cmds = append(cmds, cmd)
 	}
 	return m, tea.Batch(cmds...)
+}
+
+func (m *Model) resetForNewGame() {
+	// Reset for a new game
+	m.floorCache = make(map[int]*floor.Floor)
+	m.floorVisibility = make(map[int]bool)
+	m.floor = getFloor(0, m.state, m.floorCache, nil, nil)
+	startPos := dweller.Position{X: m.floor.Maze.Start().X, Y: m.floor.Maze.Start().Y}
+	m.haunteed = dweller.PlaceHaunteed(m.state.SpriteSize, startPos)
+	m.score.Reset()
+	m.score.SetHigh(m.state.GetHighScore())
+	m.resetPlayModel()
+	m.status = statusGameplay
 }
 
 func (m *Model) resetPlayModel() {

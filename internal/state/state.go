@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/denisbrodbeck/machineid"
-	"github.com/faiface/beep"
 	"github.com/vinser/haunteed/internal/geoip"
 	"github.com/vinser/haunteed/internal/sound"
 )
@@ -66,6 +65,19 @@ func generateKey() []byte {
 	}
 	sum := sha256.Sum256([]byte(appID))
 	return sum[:]
+}
+
+// SetMute toggles the mute state and applies it to the sound manager.
+func (s *State) SetMute(mute bool) {
+	s.Mute = mute
+	if s.SoundManager == nil {
+		return
+	}
+	if s.Mute {
+		s.SoundManager.Mute()
+	} else {
+		s.SoundManager.Unmute()
+	}
 }
 
 // UpdateAndSave updates the state with new game results and persists it to a file.
@@ -134,35 +146,23 @@ var fallbackLocation = &geoip.LocationInfo{
 }
 
 func New() *State {
-	path, err := getSavePath()
-	if err == nil {
-		os.Remove(path)
-	}
 	seeds := make(map[int]int64)
 	seeds[0] = time.Now().UnixNano()
-
-	geoip.SetCacheTTL(0)
 	loc, err := geoip.GetLocationInfo()
 	if err != nil {
 		loc = fallbackLocation
 	}
-	mute := false
-	soundMgr, err := sound.NewManager(sound.CommonSampleRate)
-	if err != nil {
-		mute = true
-	}
-	if err = soundMgr.LoadSamples(); err != nil {
-		mute = true
-	}
-	return &State{
+	soundMgr, soundInitFailed := initializeSound()
+	s := &State{
 		GameMode:     ModeDefault,
 		NightOption:  NightDefault,
 		SpriteSize:   SpriteDefault,
-		Mute:         mute,
 		FloorSeeds:   seeds,
 		LocationInfo: *loc,
 		SoundManager: soundMgr,
 	}
+	s.SetMute(soundInitFailed)
+	return s
 }
 
 // Load reads the state from disk, decrypts and verifies it.
@@ -195,14 +195,29 @@ func Load() *State {
 		return New() // Corrupted JSON
 	}
 
-	s.SoundManager, err = sound.NewManager(beep.SampleRate(44100))
-	if err != nil {
+	// Initialize sound manager. If it fails, the game is forced into mute mode,
+	// but we still respect the user's saved preference for the next session.
+	soundMgr, soundInitFailed := initializeSound()
+	s.SoundManager = soundMgr
+	if soundInitFailed {
 		s.Mute = true
 	}
-	if err := s.SoundManager.LoadSamples(); err != nil {
-		s.Mute = true
-	}
+	// Apply the loaded mute state to the newly created sound manager.
+	s.SetMute(s.Mute)
 	return s
+}
+
+// initializeSound creates and loads a sound manager.
+// It returns the manager and a boolean indicating if initialization failed (and thus should be muted).
+func initializeSound() (*sound.Manager, bool) {
+	soundMgr, err := sound.NewManager(sound.CommonSampleRate)
+	if err != nil {
+		return nil, true // Muted due to init error
+	}
+	if err := soundMgr.LoadSamples(); err != nil {
+		return nil, true // Muted due to load error
+	}
+	return soundMgr, false
 }
 
 // ======================
