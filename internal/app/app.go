@@ -208,13 +208,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case setup.SaveSettingsMsg:
 			m.status = statusGameplay
+			// Preserve the sound manager as it's a global resource that persists across state resets.
+			soundManager := m.state.SoundManager
 			if msg.Reset {
 				m.state = state.New()
 			} else {
 				m.state.GameMode = msg.Mode
 				m.state.NightOption = msg.CrazyNight
+				m.state.SpriteSize = msg.SpriteSize
 				m.state.SetMute(msg.Mute)
 			}
+			m.state.SoundManager = soundManager
 			m.resetForNewGame()
 		case setup.DiscardSettingsMsg:
 			m.status = statusGameplay
