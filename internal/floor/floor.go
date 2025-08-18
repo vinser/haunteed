@@ -49,6 +49,14 @@ const (
 	// Maze generation Bias difines maze complexity
 	Bias = 0.2
 )
+const (
+	ModeEasyWidth   = 21
+	ModeEasyHeight  = 15
+	ModeNoisyWidth  = 31
+	ModeNoisyHeight = 21
+	ModeCrazyWidth  = 41
+	ModeCrazyHeight = 25
+)
 
 // New initializes a new floor with its configuration and dot count.
 func New(index int, seed int64, startPoint, endPoint *maze.Point, spriteSize, gameMode, crazyNight string) *Floor {
@@ -56,11 +64,11 @@ func New(index int, seed int64, startPoint, endPoint *maze.Point, spriteSize, ga
 	var width, height int
 	switch gameMode {
 	case state.ModeNoisy:
-		width, height = 31, 21
+		width, height = ModeNoisyWidth, ModeNoisyHeight
 	case state.ModeCrazy:
-		width, height = 41, 25
+		width, height = ModeCrazyWidth, ModeCrazyHeight
 	default: // state.ModeEasy
-		width, height = 21, 15
+		width, height = ModeEasyWidth, ModeEasyHeight
 	}
 
 	// If no seed is provided, the behavior will be deterministic for a given index.
