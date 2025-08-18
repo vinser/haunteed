@@ -22,6 +22,18 @@ const (
 	autoRepeatThreshold = 100 * time.Millisecond // Anticheat
 )
 
+// Viewport represents the visible area of the maze
+type Viewport struct {
+	StartX, StartY int // Top-left corner of viewport in maze coordinates
+	Width, Height  int // Dimensions of viewport
+}
+
+// TerminalDimensions holds the terminal size information
+type TerminalDimensions struct {
+	Width  int
+	Height int
+}
+
 type Model struct {
 	state             *state.State
 	floor             *floor.Floor
@@ -39,6 +51,8 @@ type Model struct {
 	sb                *strings.Builder
 	fullVisibility    bool
 	paused            bool
+	terminal          TerminalDimensions // Terminal dimensions
+	viewport          Viewport           // Current viewport for scrolling
 }
 
 // GhostTickMsg is a tick message.
@@ -128,11 +142,34 @@ func toggleVisibilityCmd(floorIndex int, isVisible bool) tea.Cmd {
 	}
 }
 
+// WindowSizeMsg is a message sent when the terminal is resized.
+type WindowSizeMsg struct {
+	Width  int
+	Height int
+}
+
+func windowSizeCmd(width, height int) tea.Cmd {
+	return func() tea.Msg {
+		return WindowSizeMsg{
+			Width:  width,
+			Height: height,
+		}
+	}
+}
+
 // New returns a new play model.
 func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, floorVisibility bool) Model {
 	rng := rand.New(rand.NewSource(s.FloorSeeds[f.Index]))
 	ghosts := dweller.PlaceGhosts(f.Index, s.SpriteSize, s.GameMode, f.Maze.Width(), f.Maze.Height(), f.Maze.DenWidth(), f.Maze.DenHeight(), rng)
 	ghostTick := f.GhostTickInterval
+
+	// Calculate minimal viewport size based on noisy mode maze size plus header/footer
+	minViewportWidth := 31  // ModeNoisyWidth
+	minViewportHeight := 21 // ModeNoisyHeight
+	headerHeight := 3       // Approximate header height
+	footerHeight := 1       // Footer height
+	minTerminalHeight := minViewportHeight + headerHeight + footerHeight
+
 	m := Model{
 		state:             s,
 		floor:             f,
@@ -147,6 +184,8 @@ func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, f
 		justArrived:       true,
 		sb:                &strings.Builder{},
 		fullVisibility:    floorVisibility,
+		terminal:          TerminalDimensions{Width: 80, Height: minTerminalHeight}, // Default minimal size
+		viewport:          Viewport{StartX: 0, StartY: 0, Width: minViewportWidth, Height: minViewportHeight},
 	}
 
 	if m.shouldPlayFuseSound() {
@@ -180,6 +219,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return m, tickGhosts() // Game is resumed, start ticking again
 		}
+	case WindowSizeMsg:
+		// Handle terminal resize
+		m.terminal.Width = msg.Width
+		m.terminal.Height = msg.Height
+		// Force a complete viewport reset and recalculation
+		m.resetViewport()
+		m.updateViewport()
+		return m, nil
 	}
 
 	// If paused, ignore all other messages and updates.
@@ -224,6 +271,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if canMove {
 				m.haunteed.SetPos(nextPos)
 				m.state.SoundManager.Play(sound.STEP_CREAKY)
+				// Update viewport to follow player if using scrolling
+				if m.shouldUseScrolling() {
+					m.centerViewportOnPlayer()
+				}
 			} else {
 				m.state.SoundManager.Play(sound.STEP_BUMP)
 			}
@@ -342,6 +393,22 @@ func abs(n int) int {
 	return n
 }
 
+// max returns the larger of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// min returns the smaller of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // manhattan returns the Manhattan distance between two points.
 func manhattan(a, b dweller.Position) int {
 	return abs(a.X-b.X) + abs(a.Y-b.Y)
@@ -362,46 +429,139 @@ var (
 	styleHeader = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10")) // bright green
 )
 
-// RenderMaze returns the complete screen output with game entities and stats.
-func (m Model) View() string {
-	m.sb.Reset()
-
-	// Draw game header
-	header := ""
-	if m.paused {
-		header = "\n\nPAUSED\n"
-	} else if m.state.GameMode != state.ModeCrazy {
-		header = fmt.Sprintf("Mode: %s  Floor: %d\nScore: %d  High Score: %d  Lives: %d\n",
-			m.state.GameMode,
-			m.floor.Index,
-			m.score.Get(),
-			m.score.GetHigh(),
-			m.haunteed.Lives(),
-		)
-	} else {
-		header = fmt.Sprintf("Latitude: %.4f, Longitude: %.4f, Timezone: %s\n", m.state.LocationInfo.Lat, m.state.LocationInfo.Lon, m.state.LocationInfo.Timezone)
-		header += fmt.Sprintf("Mode: %s, Night: %s  Floor: %d\nScore: %d  High Score: %d  Lives: %d\n",
-			m.state.GameMode,
-			m.state.NightOption,
-			m.floor.Index,
-			m.score.Get(),
-			m.score.GetHigh(),
-			m.haunteed.Lives(),
-		)
+// getSpriteCharDims returns (tileWidthChars, tileHeightRows) for the current sprite size
+func (m *Model) getSpriteCharDims() (int, int) {
+	switch m.state.SpriteSize {
+	case state.SpriteSmall:
+		return 1, 1
+	case state.SpriteLarge:
+		return 4, 2
+	default: // state.SpriteMedium
+		return 2, 1
 	}
-
-	m.sb.WriteString(style.PlayHeader.Render(header))
-	m.sb.WriteRune('\n')
-
-	m.renderView()
-
-	// Controls footer
-	m.sb.WriteString("\n← ↑ ↓ → — move, p — pause/resume, q — quit\n")
-	return m.sb.String()
 }
 
-func (m *Model) renderView() {
-	isLage := m.state.SpriteSize == state.SpriteLarge
+// shouldUseScrolling determines if we should use scrolling (maze > terminal) or centering (maze < terminal)
+func (m *Model) shouldUseScrolling() bool {
+	mazeWidth := m.floor.Maze.Width()
+	mazeHeight := m.floor.Maze.Height()
+	wChar, hRows := m.getSpriteCharDims()
+	headerH := m.headerRows()
+	footerH := 1
+	mazeWidthChars := mazeWidth * wChar
+	mazeHeightRows := mazeHeight * hRows
+	availableHeight := m.terminal.Height
+	return mazeWidthChars > m.terminal.Width || (headerH+mazeHeightRows+footerH) > availableHeight
+}
+
+// updateViewport recalculates the viewport dimensions and position based on terminal size
+func (m *Model) updateViewport() {
+	mazeWidth := m.floor.Maze.Width()
+	mazeHeight := m.floor.Maze.Height()
+	wChar, hRows := m.getSpriteCharDims()
+	headerH := m.headerRows()
+	footerH := 1
+	availableHeightRows := m.terminal.Height - headerH - footerH
+	if availableHeightRows < 1 {
+		availableHeightRows = 1
+	}
+	maxCellsWide := m.terminal.Width / wChar
+	if maxCellsWide < 1 {
+		maxCellsWide = 1
+	}
+	maxCellsHigh := availableHeightRows / hRows
+	if maxCellsHigh < 1 {
+		maxCellsHigh = 1
+	}
+	if maxCellsHigh >= mazeHeight {
+		m.viewport.Height = mazeHeight
+	} else {
+		m.viewport.Height = max(maxCellsHigh, 1)
+	}
+	if maxCellsWide >= mazeWidth {
+		m.viewport.Width = mazeWidth
+	} else {
+		m.viewport.Width = max(maxCellsWide, 1)
+	}
+	m.viewport.Width = min(m.viewport.Width, mazeWidth)
+	m.viewport.Height = min(m.viewport.Height, mazeHeight)
+	if m.viewport.Width < 1 {
+		m.viewport.Width = 1
+	}
+	if m.viewport.Height < 1 {
+		m.viewport.Height = 1
+	}
+	m.centerViewportOnPlayer()
+}
+
+// centerViewportOnPlayer centers the viewport on the player's position
+func (m *Model) centerViewportOnPlayer() {
+	playerPos := m.haunteed.Pos()
+	mazeWidth := m.floor.Maze.Width()
+	mazeHeight := m.floor.Maze.Height()
+
+	// Center viewport on player
+	m.viewport.StartX = playerPos.X - m.viewport.Width/2
+	m.viewport.StartY = playerPos.Y - m.viewport.Height/2
+
+	// Clamp viewport to maze boundaries
+	if m.viewport.StartX < 0 {
+		m.viewport.StartX = 0
+	}
+	if m.viewport.StartY < 0 {
+		m.viewport.StartY = 0
+	}
+	if m.viewport.StartX+m.viewport.Width > mazeWidth {
+		m.viewport.StartX = mazeWidth - m.viewport.Width
+	}
+	if m.viewport.StartY+m.viewport.Height > mazeHeight {
+		m.viewport.StartY = mazeHeight - m.viewport.Height
+	}
+
+	// Ensure player is always visible in the viewport
+	if playerPos.X < m.viewport.StartX || playerPos.X >= m.viewport.StartX+m.viewport.Width ||
+		playerPos.Y < m.viewport.StartY || playerPos.Y >= m.viewport.StartY+m.viewport.Height {
+		// Player is outside viewport, adjust to include player
+		if playerPos.X < m.viewport.StartX {
+			m.viewport.StartX = max(0, playerPos.X-2) // Show 2 columns before player
+		} else if playerPos.X >= m.viewport.StartX+m.viewport.Width {
+			m.viewport.StartX = min(mazeWidth-m.viewport.Width, playerPos.X-m.viewport.Width+2) // Show 2 columns after player
+		}
+
+		if playerPos.Y < m.viewport.StartY {
+			m.viewport.StartY = max(0, playerPos.Y-2) // Show 2 rows before player
+		} else if playerPos.Y >= m.viewport.StartY+m.viewport.Height {
+			m.viewport.StartY = min(mazeHeight-m.viewport.Height, playerPos.Y-m.viewport.Height+2) // Show 2 rows after player
+		}
+	}
+}
+
+// renderScrolling renders the maze using viewport-based scrolling when maze > terminal
+func (m *Model) renderScrolling() {
+	// Draw game header
+	m.sb.WriteString(style.PlayHeader.Render(m.headerText()))
+	// Ensure we start maze at column 0
+	m.sb.WriteString("\n")
+	// Render only the visible portion of the maze
+	m.renderMazeViewport(m.viewport.StartX, m.viewport.StartY, m.viewport.Width, m.viewport.Height)
+}
+
+// renderHorizontalCentering renders the maze centered within the terminal when maze < terminal
+func (m *Model) renderHorizontalCentering() {
+	mazeWidth := m.floor.Maze.Width()
+	mazeHeight := m.floor.Maze.Height()
+	wChar, hRows := m.getSpriteCharDims()
+	// Draw game header
+	m.sb.WriteString(style.PlayHeader.Render(m.headerText()))
+	// Ensure we start maze at column 0
+	m.sb.WriteString("\n")
+	// Render the maze centered horizontally
+	m.renderMazeCenteredWithTileSize(mazeWidth, mazeHeight, wChar, hRows)
+}
+
+// renderMazeViewport renders a specific viewport of the maze
+func (m *Model) renderMazeViewport(startX, startY, width, height int) {
+	isLarge := m.state.SpriteSize == state.SpriteLarge
 	f := m.floor
 	h := m.haunteed
 	g := m.ghosts
@@ -417,9 +577,10 @@ func (m *Model) renderView() {
 		dwellerSprites[gh.Pos()] = gh.Render(m.state.SpriteSize)
 	}
 
-	for y := 0; y < m.floor.Maze.Height(); y++ {
+	// Render only the viewport area
+	for y := startY; y < startY+height && y < f.Maze.Height(); y++ {
 		var line1, line2 strings.Builder
-		for x := 0; x < f.Maze.Width(); x++ {
+		for x := startX; x < startX+width && x < f.Maze.Width(); x++ {
 			var sprite []string
 			pos := dweller.Position{X: x, Y: y}
 			if m.notVisible(pos, htPos) {
@@ -444,17 +605,130 @@ func (m *Model) renderView() {
 				}
 			}
 			line1.WriteString(sprite[0])
-			if isLage {
+			if isLarge {
 				line2.WriteString(sprite[1])
 			}
 		}
 		m.sb.WriteString(line1.String())
 		m.sb.WriteRune('\n')
-		if isLage {
+		if isLarge {
 			m.sb.WriteString(line2.String())
 			m.sb.WriteRune('\n')
 		}
 	}
+}
+
+// renderMazeCenteredWithTileSize renders the maze centered, accounting for tile character width/height
+func (m *Model) renderMazeCenteredWithTileSize(mazeWidth, mazeHeight, wChar, hRows int) {
+	isLarge := m.state.SpriteSize == state.SpriteLarge
+	f := m.floor
+	h := m.haunteed
+	g := m.ghosts
+
+	htPos := h.Pos()
+
+	// Create a map of dweller positions to their rendered sprites for efficient lookup.
+	dwellerSprites := make(map[dweller.Position][]string)
+	dwellerSprites[h.Pos()] = h.Render(m.state.SpriteSize)
+	for _, gh := range g {
+		dwellerSprites[gh.Pos()] = gh.Render(m.state.SpriteSize)
+	}
+
+	// Calculate horizontal padding to center the maze in characters
+	mazeWidthChars := mazeWidth * wChar
+	horizontalPadding := m.terminal.Width - mazeWidthChars
+	if horizontalPadding < 0 {
+		horizontalPadding = 0
+	}
+	leftPadding := horizontalPadding / 2
+	rightPadding := horizontalPadding - leftPadding
+
+	for y := 0; y < mazeHeight; y++ {
+		var line1, line2 strings.Builder
+
+		// Add left padding
+		for i := 0; i < leftPadding; i++ {
+			line1.WriteRune(' ')
+			if isLarge {
+				line2.WriteRune(' ')
+			}
+		}
+
+		for x := 0; x < mazeWidth; x++ {
+			var sprite []string
+			pos := dweller.Position{X: x, Y: y}
+			if m.notVisible(pos, htPos) {
+				sprite = f.Sprites[floor.Empty]
+			} else {
+				if sp, ok := dwellerSprites[pos]; ok {
+					sprite = sp
+				} else {
+					item, _ := f.ItemAt(x, y)
+					if item == floor.CrumblingWall {
+						if m.powerMode {
+							sprite = f.Sprites[floor.CrumblingWall]
+						} else {
+							sprite = f.Sprites[floor.Wall]
+						}
+					} else if item == floor.Fuse && !m.fullVisibility {
+						sprite = f.DimFuseSprite
+					} else {
+						sprite = f.Sprites[item]
+					}
+				}
+			}
+			line1.WriteString(sprite[0])
+			if isLarge {
+				line2.WriteString(sprite[1])
+			}
+		}
+
+		// Add right padding
+		for i := 0; i < rightPadding; i++ {
+			line1.WriteRune(' ')
+			if isLarge {
+				line2.WriteRune(' ')
+			}
+		}
+
+		m.sb.WriteString(line1.String())
+		m.sb.WriteRune('\n')
+		if isLarge {
+			m.sb.WriteString(line2.String())
+			m.sb.WriteRune('\n')
+		}
+	}
+}
+
+// headerText builds the header string based on game state. It always ends with a newline and may span multiple lines.
+func (m *Model) headerText() string {
+	var b strings.Builder
+	if m.paused {
+		b.WriteString("\n\nPAUSED")
+	} else {
+		if m.state.GameMode == state.ModeCrazy {
+			// First line: geo/time info (restored)
+			b.WriteString(fmt.Sprintf("Latitude: %.4f, Longitude: %.4f, Timezone: %s\n", m.state.LocationInfo.Lat, m.state.LocationInfo.Lon, m.state.LocationInfo.Timezone))
+			// Second line: mode/night/floor
+			b.WriteString(fmt.Sprintf("Mode: %s, Night: %s  Floor: %d\n", m.state.GameMode, m.state.NightOption, m.floor.Index))
+		} else {
+			// One line: mode/floor
+			b.WriteString(fmt.Sprintf("\nMode: %s  Floor: %d\n", m.state.GameMode, m.floor.Index))
+		}
+		// Final line: score/lives
+		b.WriteString(fmt.Sprintf("Score: %d  High Score: %d  Lives: %d", m.score.Get(), m.score.GetHigh(), m.haunteed.Lives()))
+	}
+	return b.String()
+}
+
+// headerRows returns the number of terminal rows the header occupies
+func (m *Model) headerRows() int {
+	return 3
+}
+
+// resetViewport completely resets the viewport to initial state
+func (m *Model) resetViewport() {
+	m.viewport = Viewport{StartX: 0, StartY: 0, Width: 0, Height: 0}
 }
 
 // notVisible checks if the sprite is not visible to the haunteed.
@@ -467,5 +741,25 @@ func (m *Model) renderView() {
 func (m Model) notVisible(spritePos, hauntedPos dweller.Position) bool {
 	isLimitedVisibilityActive := (m.state.GameMode == state.ModeCrazy) && (m.floor.Index < 0 || m.state.NightOption == state.NightAlways || m.state.NightOption == state.NightReal)
 	return isLimitedVisibilityActive && !m.fullVisibility && distance(spritePos, hauntedPos) > m.floor.VisibilityRadius
+}
 
+// View returns the complete screen output with game entities and stats.
+func (m Model) View() string {
+	m.sb.Reset()
+
+	// Only update viewport if we're in scrolling mode
+	if m.shouldUseScrolling() {
+		m.updateViewport()
+	}
+
+	// Determine rendering mode and render accordingly
+	if m.shouldUseScrolling() {
+		m.renderScrolling()
+	} else {
+		m.renderHorizontalCentering()
+	}
+
+	// Controls footer (single line)
+	m.sb.WriteString("\n← ↑ ↓ → — move, p — pause/resume, q — quit\n")
+	return m.sb.String()
 }

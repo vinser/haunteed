@@ -52,6 +52,9 @@ type Model struct {
 	respawn respawn.Model
 	over    over.Model
 	quit    quit.Model
+	// terminal size cache
+	termWidth  int
+	termHeight int
 }
 
 func New() Model {
@@ -187,6 +190,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state.SetMute(!m.state.Mute)
 			return m, nil
 		}
+	case tea.WindowSizeMsg:
+		// Always remember the latest terminal size
+		m.termWidth = msg.Width
+		m.termHeight = msg.Height
+		// Handle terminal resize by passing dimensions to the play model
+		if m.status == statusGameplay {
+			// Create a custom window size message for the play model
+			playWindowSizeMsg := play.WindowSizeMsg{
+				Width:  msg.Width,
+				Height: msg.Height,
+			}
+			m.play, cmd = m.play.Update(playWindowSizeMsg)
+			cmds = append(cmds, cmd)
+		}
+		// Force a full repaint by returning no cached content and clearing the screen
+		cmds = append(cmds, tea.ClearScreen)
+		return m, tea.Batch(cmds...)
 	}
 
 	switch m.status {
@@ -332,6 +352,10 @@ func (m *Model) resetForNewGame() {
 
 func (m *Model) resetPlayModel() {
 	m.play = play.New(m.state, m.floor, m.score, m.haunteed, m.floorVisibility[m.floor.Index])
+	// Seed the play model with the latest terminal size so it renders correctly before any manual resize
+	if m.termWidth > 0 && m.termHeight > 0 {
+		m.play, _ = m.play.Update(play.WindowSizeMsg{Width: m.termWidth, Height: m.termHeight})
+	}
 }
 
 func (m *Model) resetPlayModelForRespawn() {
@@ -341,6 +365,10 @@ func (m *Model) resetPlayModelForRespawn() {
 	m.haunteed.SetPos(m.haunteed.Home())
 	// Create a new play model, which will re-place ghosts.
 	m.play = play.New(m.state, m.floor, m.score, m.haunteed, m.floorVisibility[m.floor.Index])
+	// Seed size immediately
+	if m.termWidth > 0 && m.termHeight > 0 {
+		m.play, _ = m.play.Update(play.WindowSizeMsg{Width: m.termWidth, Height: m.termHeight})
+	}
 }
 
 func (m Model) View() string {
