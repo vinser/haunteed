@@ -185,7 +185,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q": // quit all app models
 			m.status = statusQuitting // Set status to show quit message
-			return m, tea.Quit
+			m.quit = quit.New()
+			return m, nil
 		case "m": // mute/unmute
 			m.state.SetMute(!m.state.Mute)
 			return m, nil
@@ -331,6 +332,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		default:
 			m.over, cmd = m.over.Update(msg)
+		}
+		cmds = append(cmds, cmd)
+	case statusQuitting:
+		switch msg := msg.(type) {
+		case quit.TimedoutMsg:
+			return m, tea.Quit
+		default:
+			m.quit, cmd = m.quit.Update(msg)
 		}
 		cmds = append(cmds, cmd)
 	}

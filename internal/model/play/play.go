@@ -272,9 +272,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.haunteed.SetPos(nextPos)
 				m.state.SoundManager.Play(sound.STEP_CREAKY)
 				// Update viewport to follow player if using scrolling
-				if m.shouldUseScrolling() {
-					m.centerViewportOnPlayer()
-				}
+				m.centerViewportOnPlayer()
 			} else {
 				m.state.SoundManager.Play(sound.STEP_BUMP)
 			}
@@ -441,17 +439,27 @@ func (m *Model) getSpriteCharDims() (int, int) {
 	}
 }
 
-// shouldUseScrolling determines if we should use scrolling (maze > terminal) or centering (maze < terminal)
-func (m *Model) shouldUseScrolling() bool {
-	mazeWidth := m.floor.Maze.Width()
-	mazeHeight := m.floor.Maze.Height()
-	wChar, hRows := m.getSpriteCharDims()
+// shouldScrollHorizontally returns true if the maze width is greater than the terminal width.
+func (m *Model) shouldScrollHorizontally() bool {
+	mazeWidthChars, _ := m.getMazePixelDimensions()
+	return mazeWidthChars > m.terminal.Width
+}
+
+// shouldScrollVertically returns true if the maze height is greater than the available terminal height.
+func (m *Model) shouldScrollVertically() bool {
+	_, mazeHeightRows := m.getMazePixelDimensions()
 	headerH := m.headerRows()
 	footerH := 1
-	mazeWidthChars := mazeWidth * wChar
-	mazeHeightRows := mazeHeight * hRows
-	availableHeight := m.terminal.Height
-	return mazeWidthChars > m.terminal.Width || (headerH+mazeHeightRows+footerH) > availableHeight
+	availableHeight := m.terminal.Height - headerH - footerH
+	return mazeHeightRows > availableHeight
+}
+
+// getMazePixelDimensions returns the maze dimensions in characters and rows.
+func (m *Model) getMazePixelDimensions() (int, int) {
+	wChar, hRows := m.getSpriteCharDims()
+	mazeWidth := m.floor.Maze.Width()
+	mazeHeight := m.floor.Maze.Height()
+	return mazeWidth * wChar, mazeHeight * hRows
 }
 
 // updateViewport recalculates the viewport dimensions and position based on terminal size
@@ -473,16 +481,19 @@ func (m *Model) updateViewport() {
 	if maxCellsHigh < 1 {
 		maxCellsHigh = 1
 	}
-	if maxCellsHigh >= mazeHeight {
-		m.viewport.Height = mazeHeight
-	} else {
-		m.viewport.Height = max(maxCellsHigh, 1)
-	}
-	if maxCellsWide >= mazeWidth {
-		m.viewport.Width = mazeWidth
-	} else {
+
+	if m.shouldScrollHorizontally() {
 		m.viewport.Width = max(maxCellsWide, 1)
+	} else {
+		m.viewport.Width = mazeWidth
 	}
+
+	if m.shouldScrollVertically() {
+		m.viewport.Height = max(maxCellsHigh, 1)
+	} else {
+		m.viewport.Height = mazeHeight
+	}
+
 	m.viewport.Width = min(m.viewport.Width, mazeWidth)
 	m.viewport.Height = min(m.viewport.Height, mazeHeight)
 	if m.viewport.Width < 1 {
@@ -536,50 +547,86 @@ func (m *Model) centerViewportOnPlayer() {
 	}
 }
 
-// renderScrolling renders the maze using viewport-based scrolling when maze > terminal
-func (m *Model) renderScrolling() {
-	// Draw game header
-	m.sb.WriteString(style.PlayHeader.Render(m.headerText()))
-	// Ensure we start maze at column 0
-	m.sb.WriteString("\n")
-	// Render only the visible portion of the maze
-	m.renderMazeViewport(m.viewport.StartX, m.viewport.StartY, m.viewport.Width, m.viewport.Height)
-}
+// render renders the maze with the appropriate scrolling and centering.
+func (m *Model) render() {
+	scrollH := m.shouldScrollHorizontally()
+	scrollV := m.shouldScrollVertically()
 
-// renderHorizontalCentering renders the maze centered within the terminal when maze < terminal
-func (m *Model) renderHorizontalCentering() {
+	if scrollH || scrollV {
+		m.updateViewport()
+	}
+
 	mazeWidth := m.floor.Maze.Width()
 	mazeHeight := m.floor.Maze.Height()
+
+	startX, startY := 0, 0
+	viewW, viewH := mazeWidth, mazeHeight
+	centerH, centerV := !scrollH, !scrollV
+
+	if scrollH {
+		startX = m.viewport.StartX
+		viewW = m.viewport.Width
+	}
+	if scrollV {
+		startY = m.viewport.StartY
+		viewH = m.viewport.Height
+	}
 	wChar, hRows := m.getSpriteCharDims()
+	mazeWidthChars := viewW * wChar
+	mazeHeightRows := viewH * hRows
+
+	var horizontalPadding, verticalPadding int
+	if centerH {
+		horizontalPadding = (m.terminal.Width - mazeWidthChars) / 2
+		if horizontalPadding < 0 {
+			horizontalPadding = 0
+		}
+	}
+	if centerV {
+		headerH := m.headerRows()
+		footerH := 1
+		availableHeight := m.terminal.Height - headerH - footerH
+		verticalPadding = (availableHeight - mazeHeightRows) / 2
+		if verticalPadding < 0 {
+			verticalPadding = 0
+		}
+	}
+
+	for i := 0; i < verticalPadding; i++ {
+		m.sb.WriteString("\n")
+	}
+
 	// Draw game header
-	m.sb.WriteString(style.PlayHeader.Render(m.headerText()))
-	// Ensure we start maze at column 0
-	m.sb.WriteString("\n")
-	// Render the maze centered horizontally
-	m.renderMazeCenteredWithTileSize(mazeWidth, mazeHeight, wChar, hRows)
+	m.renderHeader(horizontalPadding)
+
+	m.renderMaze(startX, startY, viewW, viewH, horizontalPadding)
+
+	// Controls footer (single line)
+	m.renderFooter(horizontalPadding)
 }
 
-// renderMazeViewport renders a specific viewport of the maze
-func (m *Model) renderMazeViewport(startX, startY, width, height int) {
+// renderMaze renders a specific viewport of the maze.
+func (m *Model) renderMaze(startX, startY, width, height, horizontalPadding int) {
 	isLarge := m.state.SpriteSize == state.SpriteLarge
 	f := m.floor
 	h := m.haunteed
 	g := m.ghosts
-
 	htPos := h.Pos()
 
-	// Create a map of dweller positions to their rendered sprites for efficient lookup.
-	// Ghosts are added after the haunteed to ensure they are rendered on top
-	// if they occupy the same cell, matching the original rendering logic.
 	dwellerSprites := make(map[dweller.Position][]string)
 	dwellerSprites[h.Pos()] = h.Render(m.state.SpriteSize)
 	for _, gh := range g {
 		dwellerSprites[gh.Pos()] = gh.Render(m.state.SpriteSize)
 	}
 
-	// Render only the viewport area
 	for y := startY; y < startY+height && y < f.Maze.Height(); y++ {
 		var line1, line2 strings.Builder
+		if horizontalPadding > 0 {
+			line1.WriteString(strings.Repeat(" ", horizontalPadding))
+			if isLarge {
+				line2.WriteString(strings.Repeat(" ", horizontalPadding))
+			}
+		}
 		for x := startX; x < startX+width && x < f.Maze.Width(); x++ {
 			var sprite []string
 			pos := dweller.Position{X: x, Y: y}
@@ -594,7 +641,6 @@ func (m *Model) renderMazeViewport(startX, startY, width, height int) {
 						if m.powerMode {
 							sprite = f.Sprites[floor.CrumblingWall]
 						} else {
-							// Render as a normal wall when not in power mode
 							sprite = f.Sprites[floor.Wall]
 						}
 					} else if item == floor.Fuse && !m.fullVisibility {
@@ -618,104 +664,36 @@ func (m *Model) renderMazeViewport(startX, startY, width, height int) {
 	}
 }
 
-// renderMazeCenteredWithTileSize renders the maze centered, accounting for tile character width/height
-func (m *Model) renderMazeCenteredWithTileSize(mazeWidth, mazeHeight, wChar, hRows int) {
-	isLarge := m.state.SpriteSize == state.SpriteLarge
-	f := m.floor
-	h := m.haunteed
-	g := m.ghosts
-
-	htPos := h.Pos()
-
-	// Create a map of dweller positions to their rendered sprites for efficient lookup.
-	dwellerSprites := make(map[dweller.Position][]string)
-	dwellerSprites[h.Pos()] = h.Render(m.state.SpriteSize)
-	for _, gh := range g {
-		dwellerSprites[gh.Pos()] = gh.Render(m.state.SpriteSize)
-	}
-
-	// Calculate horizontal padding to center the maze in characters
-	mazeWidthChars := mazeWidth * wChar
-	horizontalPadding := m.terminal.Width - mazeWidthChars
-	if horizontalPadding < 0 {
-		horizontalPadding = 0
-	}
-	leftPadding := horizontalPadding / 2
-	rightPadding := horizontalPadding - leftPadding
-
-	for y := 0; y < mazeHeight; y++ {
-		var line1, line2 strings.Builder
-
-		// Add left padding
-		for i := 0; i < leftPadding; i++ {
-			line1.WriteRune(' ')
-			if isLarge {
-				line2.WriteRune(' ')
-			}
-		}
-
-		for x := 0; x < mazeWidth; x++ {
-			var sprite []string
-			pos := dweller.Position{X: x, Y: y}
-			if m.notVisible(pos, htPos) {
-				sprite = f.Sprites[floor.Empty]
-			} else {
-				if sp, ok := dwellerSprites[pos]; ok {
-					sprite = sp
-				} else {
-					item, _ := f.ItemAt(x, y)
-					if item == floor.CrumblingWall {
-						if m.powerMode {
-							sprite = f.Sprites[floor.CrumblingWall]
-						} else {
-							sprite = f.Sprites[floor.Wall]
-						}
-					} else if item == floor.Fuse && !m.fullVisibility {
-						sprite = f.DimFuseSprite
-					} else {
-						sprite = f.Sprites[item]
-					}
-				}
-			}
-			line1.WriteString(sprite[0])
-			if isLarge {
-				line2.WriteString(sprite[1])
-			}
-		}
-
-		// Add right padding
-		for i := 0; i < rightPadding; i++ {
-			line1.WriteRune(' ')
-			if isLarge {
-				line2.WriteRune(' ')
-			}
-		}
-
-		m.sb.WriteString(line1.String())
-		m.sb.WriteRune('\n')
-		if isLarge {
-			m.sb.WriteString(line2.String())
-			m.sb.WriteRune('\n')
-		}
-	}
+// renderHeader
+func (m *Model) renderHeader(horizontalPadding int) {
+	m.sb.WriteString(style.PlayHeader.Render(m.headerText(horizontalPadding)))
+	m.sb.WriteString("\n")
 }
 
 // headerText builds the header string based on game state. It always ends with a newline and may span multiple lines.
-func (m *Model) headerText() string {
+func (m *Model) headerText(horizontalPadding int) string {
 	var b strings.Builder
+	padString := strings.Repeat(" ", horizontalPadding)
 	if m.paused {
-		b.WriteString("\n\nPAUSED")
+		b.WriteString("\n\n")
+		b.WriteString(padString)
+		b.WriteString("PAUSED")
 	} else {
 		if m.state.GameMode == state.ModeCrazy {
 			// First line: geo/time info (restored)
+			b.WriteString(padString)
 			b.WriteString(fmt.Sprintf("Latitude: %.4f, Longitude: %.4f, Timezone: %s\n", m.state.LocationInfo.Lat, m.state.LocationInfo.Lon, m.state.LocationInfo.Timezone))
 			// Second line: mode/night/floor
+			b.WriteString(padString)
 			b.WriteString(fmt.Sprintf("Mode: %s, Night: %s  Floor: %d\n", m.state.GameMode, m.state.NightOption, m.floor.Index))
 		} else {
 			// One line: mode/floor
-			b.WriteString(fmt.Sprintf("\nMode: %s  Floor: %d\n", m.state.GameMode, m.floor.Index))
+			b.WriteString("\n")
+			b.WriteString(padString)
+			b.WriteString(fmt.Sprintf("Mode: %s  Floor: %d\n", m.state.GameMode, m.floor.Index))
 		}
 		// Final line: score/lives
+		b.WriteString(padString)
 		b.WriteString(fmt.Sprintf("Score: %d  High Score: %d  Lives: %d", m.score.Get(), m.score.GetHigh(), m.haunteed.Lives()))
 	}
 	return b.String()
@@ -725,6 +703,15 @@ func (m *Model) headerText() string {
 func (m *Model) headerRows() int {
 	return 3
 }
+
+// renderFooter
+func (m *Model) renderFooter(horizontalPadding int) {
+	m.sb.WriteString("\n")
+	m.sb.WriteString(strings.Repeat(" ", horizontalPadding))
+	m.sb.WriteString("← ↑ ↓ → — move, p — pause/resume, q — quit\n")
+}
+
+//
 
 // resetViewport completely resets the viewport to initial state
 func (m *Model) resetViewport() {
@@ -744,22 +731,10 @@ func (m Model) notVisible(spritePos, hauntedPos dweller.Position) bool {
 }
 
 // View returns the complete screen output with game entities and stats.
-func (m Model) View() string {
+func (m *Model) View() string {
 	m.sb.Reset()
 
-	// Only update viewport if we're in scrolling mode
-	if m.shouldUseScrolling() {
-		m.updateViewport()
-	}
+	m.render()
 
-	// Determine rendering mode and render accordingly
-	if m.shouldUseScrolling() {
-		m.renderScrolling()
-	} else {
-		m.renderHorizontalCentering()
-	}
-
-	// Controls footer (single line)
-	m.sb.WriteString("\n← ↑ ↓ → — move, p — pause/resume, q — quit\n")
 	return m.sb.String()
 }
