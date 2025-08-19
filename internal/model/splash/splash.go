@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/vinser/haunteed/internal/state"
 	"github.com/vinser/haunteed/internal/style"
 )
@@ -19,6 +20,7 @@ const (
             ███   
             ███   
 `
+
 	haunteedClosed = `
    ███   ███         
    ███▄▄▄███         
@@ -28,6 +30,7 @@ const (
          ███   
          ███   
 `
+
 	haunteedFront = `
                   
                   
@@ -37,6 +40,7 @@ const (
                   
                   
 `
+
 	curly = `
   ▄█████▄           
   ██                
@@ -46,6 +50,7 @@ const (
          ██████▀ 
          ██  ▀█▄
 `
+
 	lofty = `
   ██              
   ██               
@@ -55,6 +60,7 @@ const (
          █████   
          ██      
 `
+
 	fluffy = `
   ██████          
   ██▄▄▄            
@@ -97,8 +103,10 @@ type movingGhost struct {
 type Model struct {
 	state *state.State
 
-	width  int
-	height int
+	width      int
+	height     int
+	termWidth  int
+	termHeight int
 
 	pos        int
 	open       bool
@@ -176,6 +184,11 @@ func New(state *state.State, width, height int) Model {
 		sb:             &strings.Builder{},
 		ghostIndex:     -1,
 	}
+}
+
+func (m *Model) SetSize(width, height int) {
+	m.termWidth = width
+	m.termHeight = height
 }
 
 func (m Model) Init() tea.Cmd {
@@ -307,7 +320,11 @@ func (m Model) View() string {
 	} else {
 		m.drawHaunteed()
 	}
-	return m.renderGrid()
+	view := m.renderGrid()
+	if m.termWidth > 0 && m.termHeight > 0 {
+		return lipgloss.Place(m.termWidth, m.termHeight, lipgloss.Center, lipgloss.Center, view)
+	}
+	return view
 }
 
 func (m *Model) clearGrid() {

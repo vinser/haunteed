@@ -106,18 +106,24 @@ func getState() *state.State {
 }
 
 func setSplash(st *state.State) splash.Model {
-	var s splash.Model
+	mazeWidth, mazeHeight := getMazeDimensions(st.GameMode)
+
+	var spriteWidth, spriteHeight int
 	switch st.SpriteSize {
 	case "small":
-		s = splash.New(st, 21, 15)
+		spriteWidth, spriteHeight = 1, 1
 	case "medium":
-		s = splash.New(st, 47, 15)
+		spriteWidth, spriteHeight = 2, 1
 	case "large":
-		s = splash.New(st, 85, 31)
+		spriteWidth, spriteHeight = 4, 2
 	default:
-		s = splash.New(st, 47, 15)
+		spriteWidth, spriteHeight = 2, 1 // Default to medium
 	}
-	return s
+
+	width := mazeWidth * spriteWidth
+	height := mazeHeight * spriteHeight
+
+	return splash.New(st, width, height)
 }
 
 const minFloorVisibilityRadius = 4
@@ -137,7 +143,8 @@ func getFloor(index int, st *state.State, cache map[int]*floor.Floor, startPoint
 	if _, ok := st.FloorSeeds[index]; !ok {
 		st.FloorSeeds[index] = time.Now().UnixNano()
 	}
-	f := floor.New(index, st.FloorSeeds[index], startPoint, endPoint, st.SpriteSize, st.GameMode, st.NightOption)
+	width, height := getMazeDimensions(st.GameMode)
+	f := floor.New(index, st.FloorSeeds[index], startPoint, endPoint, width, height, st.SpriteSize, st.GameMode, st.NightOption)
 
 	// Set floor visibility radius
 	setFloorVisibility(f, st)
@@ -169,6 +176,17 @@ func setFloorVisibility(f *floor.Floor, st *state.State) {
 				f.VisibilityRadius = minFloorVisibilityRadius + int(float64(f.FullVisibilityRadius()-minFloorVisibilityRadius)*litIntensity)
 			}
 		}
+	}
+}
+
+func getMazeDimensions(gameMode string) (width, height int) {
+	switch gameMode {
+	case state.ModeNoisy:
+		return floor.ModeNoisyWidth, floor.ModeNoisyHeight
+	case state.ModeCrazy:
+		return floor.ModeCrazyWidth, floor.ModeCrazyHeight
+	default: // state.ModeEasy
+		return floor.ModeEasyWidth, floor.ModeEasyHeight
 	}
 }
 
@@ -204,6 +222,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.play, cmd = m.play.Update(playWindowSizeMsg)
 			cmds = append(cmds, cmd)
+		} else if m.status == statusStartSplash {
+			m.splash.SetSize(msg.Width, msg.Height)
 		}
 		// Force a full repaint by returning no cached content and clearing the screen
 		cmds = append(cmds, tea.ClearScreen)

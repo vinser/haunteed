@@ -59,9 +59,8 @@ const (
 )
 
 // New initializes a new floor with its configuration and dot count.
-func New(index int, seed int64, startPoint, endPoint *maze.Point, spriteSize, gameMode, crazyNight string) *Floor {
+func New(index int, seed int64, startPoint, endPoint *maze.Point, width, height int, spriteSize, gameMode, crazyNight string) *Floor {
 	// Determine maze dimensions based on game mode
-	var width, height int
 	switch gameMode {
 	case state.ModeNoisy:
 		width, height = ModeNoisyWidth, ModeNoisyHeight
