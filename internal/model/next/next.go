@@ -5,11 +5,18 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/vinser/haunteed/internal/render"
 )
 
-const nextPeriod = 3 * time.Second
+const nextPeriod = 5 * time.Second
 
 type Model struct {
+	width      int
+	height     int
+	termWidth  int
+	termHeight int
+
 	index     int
 	nextUntil time.Time
 }
@@ -31,11 +38,22 @@ func timedoutCmd() tea.Cmd {
 	}
 }
 
-func New(index int) Model {
+func New(index, width, height int) Model {
+	if width < lipgloss.Width(footer) {
+		width = lipgloss.Width(footer)
+	}
 	return Model{
+		width:  width,
+		height: height,
+
 		index:     index,
 		nextUntil: time.Now().Add(nextPeriod),
 	}
+}
+
+func (m *Model) SetSize(width, height int) {
+	m.termWidth = width
+	m.termHeight = height
 }
 
 func (m Model) Init() tea.Cmd {
@@ -49,10 +67,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tick()
 }
 
+const footer = ""
+
 func (m Model) View() string {
-	var flash string
+	flash := ""
 	if (time.Now().UnixNano()/int64(time.Millisecond)/500)%2 == 0 {
-		flash = fmt.Sprintf("Going to Next Floor %d", m.index)
+		flash = fmt.Sprintf("Going to Floor # %d", m.index)
 	}
-	return fmt.Sprintf("\n%s\nGet ready...\n", flash)
+	return render.Page(flash, m.renderContent(), footer, m.width, m.height, m.termWidth, m.termHeight)
+}
+
+func (m Model) renderContent() string {
+	return "\nGet ready...\n"
 }

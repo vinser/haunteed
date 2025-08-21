@@ -2,11 +2,23 @@ package over
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/vinser/haunteed/internal/render"
+	"github.com/vinser/haunteed/internal/style"
 )
+
+type Model struct {
+	width      int
+	height     int
+	termWidth  int
+	termHeight int
+
+	mode      string
+	score     int
+	highScore int
+}
 
 // PlayAgainMsg is a message sent when the user chooses to play again.
 type PlayAgainMsg struct{}
@@ -26,20 +38,23 @@ func quitGameCmd() tea.Cmd {
 	}
 }
 
-type Model struct {
-	mode      string
-	score     int
-	highScore int
-	sb        *strings.Builder
-}
-
-func New(mode string, score int, highScore int) Model {
+func New(mode string, score, highScore, width, height int) Model {
+	if width < lipgloss.Width(footer) {
+		width = lipgloss.Width(footer)
+	}
 	return Model{
+		width:  width,
+		height: height,
+
 		mode:      mode,
 		score:     score,
 		highScore: highScore,
-		sb:        &strings.Builder{},
 	}
+}
+
+func (m *Model) SetSize(width, height int) {
+	m.termWidth = width
+	m.termHeight = height
 }
 
 func (m Model) Init() tea.Cmd {
@@ -63,16 +78,16 @@ var (
 	buttonStyle = lipgloss.NewStyle().Padding(0, 2).Margin(1)
 )
 
-func (m Model) View() string {
-	m.sb.Reset()
-	m.sb.WriteString("\nGame Over!\n\n")
-	if m.score > m.highScore {
-		m.sb.WriteString(fmt.Sprintf("!!! New %s High Score: ", m.mode))
-	} else {
-		m.sb.WriteString(fmt.Sprintf("Your %s Score: ", m.mode))
-	}
-	m.sb.WriteString(fmt.Sprintf("%d\n\n", m.score))
+const footer = "a — play again, q — quit"
 
-	m.sb.WriteString("\n\na — play again, q — quit\n")
-	return m.sb.String()
+func (m Model) View() string {
+	return render.Page("Game Over!", m.renderContent(), footer, m.width, m.height, m.termWidth, m.termHeight)
+}
+
+func (m Model) renderContent() string {
+	if m.score > m.highScore {
+		return style.HighScore.Render(fmt.Sprintf("New %s High score: %d !!!", m.mode, m.score))
+	} else {
+		return fmt.Sprintf("Your %s score: %d", m.mode, m.score)
+	}
 }

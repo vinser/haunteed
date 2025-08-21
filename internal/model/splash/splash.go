@@ -157,6 +157,9 @@ func timedoutCmd() tea.Cmd {
 }
 
 func New(state *state.State, width, height int) Model {
+	if width < lipgloss.Width(footer) {
+		width = lipgloss.Width(footer)
+	}
 	dots := make([]bool, width)
 	for i := range dots {
 		dots[i] = true
@@ -211,7 +214,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		switch msg.String() {
 		case "s":
 			return m, makeSettingsCmd()
-		case "enter", "esc", "space":
+		case "enter", "esc", " ":
 			return m, timedoutCmd()
 		}
 	}
@@ -309,6 +312,7 @@ func (m Model) updateGhosts() (Model, tea.Cmd) {
 }
 
 // --- View ---
+const footer = `s — settings, m — mute, space — skip, q — quit`
 
 func (m Model) View() string {
 	m.clearGrid()
@@ -442,6 +446,7 @@ func (m *Model) renderGrid() string {
 		}
 		m.sb.WriteRune('\n')
 	}
-	m.sb.WriteString("s — settings, m — mute, space — skip, q — quit\n")
+	m.sb.WriteString(style.Footer.Render(footer))
+	m.sb.WriteString("\n")
 	return m.sb.String()
 }

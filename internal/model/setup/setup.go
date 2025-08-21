@@ -6,14 +6,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/vinser/haunteed/internal/render"
 	"github.com/vinser/haunteed/internal/state"
 	"github.com/vinser/haunteed/internal/style"
 )
 
 const (
-	width  = 80
-	height = 15
-
 	selectedMode = iota
 	selectedCrazyNight
 	selectedSpriteSize
@@ -22,6 +20,11 @@ const (
 )
 
 type Model struct {
+	width      int
+	height     int
+	termWidth  int
+	termHeight int
+
 	mode       string // easy, noisy or crazy
 	crazyNight string // never, always or real (at location)
 	spriteSize string // small, medium or large
@@ -59,8 +62,14 @@ func discardSettingsCmd() tea.Cmd {
 	}
 }
 
-func New(mode, crazyNight, spriteSize string, mute bool) Model {
+func New(mode, crazyNight, spriteSize string, mute bool, width, height int) Model {
+	if width < lipgloss.Width(footer) {
+		width = lipgloss.Width(footer)
+	}
 	return Model{
+		width:  width,
+		height: height,
+
 		mode:       mode,
 		crazyNight: crazyNight,
 		spriteSize: spriteSize,
@@ -69,6 +78,11 @@ func New(mode, crazyNight, spriteSize string, mute bool) Model {
 
 		selectedSetting: 0,
 	}
+}
+
+func (m *Model) SetSize(width, height int) {
+	m.termWidth = width
+	m.termHeight = height
 }
 
 func (m Model) Init() tea.Cmd {
@@ -180,7 +194,13 @@ func nextSpriteSize(current string) string {
 	}
 }
 
+const footer = "↑ ↓ — select, space — change, s — save, esc — cancel"
+
 func (m Model) View() string {
+	return render.Page("Settings", m.renderOptions(), footer, m.width, m.height, m.termWidth, m.termHeight)
+}
+
+func (m Model) renderOptions() string {
 	type option struct {
 		label string
 		value string
@@ -191,36 +211,40 @@ func (m Model) View() string {
 		options = append(options, option{"Night lighting", m.crazyNight})
 	}
 	options = append(options, option{"Sprite size", m.spriteSize})
-	options = append(options, option{"Mute all sounds", fmt.Sprintf("%v", m.mute)})
-	options = append(options, option{"Reset progress", fmt.Sprintf("%v", m.reset)})
+	options = append(options, option{"Mute all sounds", checkBox(m.mute)})
+	options = append(options, option{"Reset progress", checkBox(m.reset)})
+	// Calculate max widths and format string
+	maxLabel, maxValue := 10, 10
+	for _, row := range options {
+		if len(row.label) > maxLabel {
+			maxLabel = len(row.label)
+		}
+		if len(row.value) > maxValue {
+			maxValue = len(row.value)
+		}
+	}
+	format := fmt.Sprintf("%%-2s%%-%ds:%%%ds", maxLabel, maxValue+2)
 
 	var b strings.Builder
-	title := style.SetupTitle.Render("Settings")
-	b.WriteString("\n" + centerText(title) + "\n\n")
-
 	for i, opt := range options {
 		prefix := "  "
 		if i == m.selectedSetting {
-			prefix = "➤ "
+			prefix = "▶ "
 		}
-		line := fmt.Sprintf("%s%s: %s", prefix, opt.label, opt.value)
+		line := fmt.Sprintf(format, prefix, opt.label, opt.value)
 		if i == m.selectedSetting {
-			b.WriteString(centerText(style.SetupItemSelected.Render(line)))
+			b.WriteString(style.SetupItemSelected.Render(line))
 		} else {
-			b.WriteString(centerText(style.SetupItem.Render(line)))
+			b.WriteString(style.SetupItem.Render(line))
 		}
 		b.WriteString("\n")
 	}
-
-	b.WriteString("\n\n\n\n\n\n" + centerText("↑ ↓ — select, space — change, s — save, esc — cancel") + "\n")
 	return b.String()
 }
 
-func centerText(text string) string {
-	padding := (width - lipgloss.Width(text)) / 2
-	return spaces(padding) + text
-}
-
-func spaces(n int) string {
-	return fmt.Sprintf("%*s", n, "")
+func checkBox(value bool) string {
+	if value {
+		return "[▪]"
+	}
+	return "[ ]"
 }

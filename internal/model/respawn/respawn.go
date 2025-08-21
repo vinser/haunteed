@@ -5,11 +5,18 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/vinser/haunteed/internal/render"
 )
 
-const respawnPeriod = 3 * time.Second
+const respawnPeriod = 5 * time.Second
 
 type Model struct {
+	width      int
+	height     int
+	termWidth  int
+	termHeight int
+
 	lives        int
 	respawnUntil time.Time
 }
@@ -31,11 +38,22 @@ func timedoutCmd() tea.Cmd {
 	}
 }
 
-func New(lives int) Model {
+func New(lives, width, height int) Model {
+	if width < lipgloss.Width(footer) {
+		width = lipgloss.Width(footer)
+	}
 	return Model{
+		width:  width,
+		height: height,
+
 		lives:        lives,
 		respawnUntil: time.Now().Add(respawnPeriod),
 	}
+}
+
+func (m *Model) SetSize(width, height int) {
+	m.termWidth = width
+	m.termHeight = height
 }
 
 func (m Model) Init() tea.Cmd {
@@ -49,11 +67,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tick()
 }
 
+const footer = ""
+
 func (m Model) View() string {
-	var flash string
+	flash := ""
 	if (time.Now().UnixNano()/int64(time.Millisecond)/500)%2 == 0 {
 		flash = "Respawning..."
 	}
-	return fmt.Sprintf(
-		"\n%s\nLives: %d\nGet ready to continue\n", flash, m.lives)
+	return render.Page(flash, m.renderContent(), footer, m.width, m.height, m.termWidth, m.termHeight)
+}
+
+func (m Model) renderContent() string {
+	return fmt.Sprintf("Lives: %d\nGet ready to continue", m.lives)
 }

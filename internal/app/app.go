@@ -106,8 +106,54 @@ func getState() *state.State {
 }
 
 func setSplash(st *state.State) splash.Model {
-	mazeWidth, mazeHeight := getMazeDimensions(st.GameMode)
+	width, height := getWidthHeight(st)
+	return splash.New(st, width, height)
+}
 
+func setSetup(st *state.State) setup.Model {
+	width, height := getWidthHeight(st)
+	model := setup.New(st.GameMode, st.NightOption, st.SpriteSize, st.Mute, width, height)
+	return model
+}
+
+func setRespawn(st *state.State, lives int) respawn.Model {
+	width, height := getWidthHeight(st)
+	model := respawn.New(lives, width, height)
+	return model
+}
+
+func setNext(st *state.State, index int) next.Model {
+	width, height := getWidthHeight(st)
+	model := next.New(index, width, height)
+	return model
+}
+
+func setGameOver(st *state.State, score int) over.Model {
+	highScore := st.GetHighScore() // Get high score before update
+	if score > highScore {
+		st.SoundManager.PlayWithCallback(sound.HIGH_SCORE, func() {
+			st.SoundManager.PlayLoop(sound.INTRO)
+		})
+	} else {
+		st.SoundManager.PlayWithCallback(sound.GAME_OVER, func() {
+			st.SoundManager.PlayLoop(sound.INTRO)
+		})
+	}
+	width, height := getWidthHeight(st)
+	model := over.New(st.GameMode, score, highScore, width, height)
+	return model
+}
+
+func setQuit(st *state.State) quit.Model {
+	st.SoundManager.StopAll()
+	st.SoundManager.Play(sound.QUIT)
+	width, height := getWidthHeight(st)
+	model := quit.New(width, height)
+	return model
+}
+
+func getWidthHeight(st *state.State) (int, int) {
+	mazeWidth, mazeHeight := getMazeDimensions(st.GameMode)
 	var spriteWidth, spriteHeight int
 	switch st.SpriteSize {
 	case "small":
@@ -122,8 +168,7 @@ func setSplash(st *state.State) splash.Model {
 
 	width := mazeWidth * spriteWidth
 	height := mazeHeight * spriteHeight
-
-	return splash.New(st, width, height)
+	return width, height
 }
 
 const minFloorVisibilityRadius = 4
@@ -203,7 +248,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q": // quit all app models
 			m.status = statusQuitting // Set status to show quit message
-			m.quit = quit.New()
+			m.quit = setQuit(m.state)
+			m.quit.SetSize(m.termWidth, m.termHeight)
 			return m, nil
 		case "m": // mute/unmute
 			m.state.SetMute(!m.state.Mute)
@@ -214,7 +260,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.termWidth = msg.Width
 		m.termHeight = msg.Height
 		// Handle terminal resize by passing dimensions to the play model
-		if m.status == statusGameplay {
+		switch m.status {
+		case statusStartSplash:
+			m.splash.SetSize(msg.Width, msg.Height)
+		case statusDoSettings:
+			m.setup.SetSize(msg.Width, msg.Height)
+		case statusGameplay:
 			// Create a custom window size message for the play model
 			playWindowSizeMsg := play.WindowSizeMsg{
 				Width:  msg.Width,
@@ -222,8 +273,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.play, cmd = m.play.Update(playWindowSizeMsg)
 			cmds = append(cmds, cmd)
-		} else if m.status == statusStartSplash {
-			m.splash.SetSize(msg.Width, msg.Height)
+		case statusFloorIntro:
+			m.next.SetSize(msg.Width, msg.Height)
+		case statusRespawning:
+			m.respawn.SetSize(msg.Width, msg.Height)
+		case statusGameOver:
+			m.over.SetSize(msg.Width, msg.Height)
+		case statusQuitting:
+			m.quit.SetSize(msg.Width, msg.Height)
 		}
 		// Force a full repaint by returning no cached content and clearing the screen
 		cmds = append(cmds, tea.ClearScreen)
@@ -235,7 +292,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case splash.MakeSettingsMsg:
 			m.status = statusDoSettings
-			m.setup = setup.New(m.state.GameMode, m.state.NightOption, m.state.SpriteSize, m.state.Mute)
+			m.setup = setSetup(m.state)
+			m.setup.SetSize(m.termWidth, m.termHeight)
 			m.state.SoundManager.StopListed(sound.INTRO)
 		case splash.TimedoutMsg:
 			m.status = statusGameplay
@@ -280,7 +338,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.haunteed.SetPos(dweller.Position{X: startPoint.X, Y: startPoint.Y})
 			m.haunteed.SetHome(dweller.Position{X: startPoint.X, Y: startPoint.Y})
 			m.haunteed.SetHaunteedSprites(m.state.SpriteSize)
-			m.next = next.New(nextFloorIndex)
+			m.next = setNext(m.state, nextFloorIndex)
+			m.next.SetSize(m.termWidth, m.termHeight)
 		case play.PrevFloorMsg:
 			m.state.SoundManager.Play(sound.TRANSITION_DOWN)
 			m.status = statusFloorIntro
@@ -293,29 +352,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			startPoint := m.floor.Maze.Start()
 			m.haunteed.SetHome(dweller.Position{X: startPoint.X, Y: startPoint.Y})
 			m.haunteed.SetHaunteedSprites(m.state.SpriteSize)
-			m.next = next.New(prevFloorIndex)
+			m.next = setNext(m.state, prevFloorIndex)
+			m.next.SetSize(m.termWidth, m.termHeight)
 		case play.RespawnMsg:
 			setFloorVisibility(m.floor, m.state)
 			m.status = statusRespawning
-			m.respawn = respawn.New(msg.Lives)
+			m.respawn = setRespawn(m.state, msg.Lives)
+			m.respawn.SetSize(m.termWidth, m.termHeight)
 		case play.GameOverMsg:
 			m.status = statusGameOver
 			score := msg.Score
-			highScore := m.state.GetHighScore() // Get high score before update
+			m.over = setGameOver(m.state, score)
+			m.over.SetSize(m.termWidth, m.termHeight)
 			if err := m.state.UpdateAndSave(m.floor.Index, score, m.floor.Seed); err != nil {
 				log.Fatal(err)
 			}
-			if score > highScore {
-				m.state.SoundManager.PlayWithCallback(sound.HIGH_SCORE, func() {
-					m.state.SoundManager.PlayLoop(sound.INTRO)
-				})
-			} else {
-				m.state.SoundManager.PlayWithCallback(sound.GAME_OVER, func() {
-					m.state.SoundManager.PlayLoop(sound.INTRO)
-				})
-			}
-			// Pass the *old* high score to the 'over' model for correct message display
-			m.over = over.New(m.state.GameMode, score, highScore)
 		case play.VisibilityToggledMsg:
 			m.floorVisibility[msg.FloorIndex] = msg.IsVisible
 			return m, nil // State updated, no further action needed

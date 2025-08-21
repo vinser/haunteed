@@ -666,7 +666,7 @@ func (m *Model) renderMaze(startX, startY, width, height, horizontalPadding int)
 
 // renderHeader
 func (m *Model) renderHeader(horizontalPadding int) {
-	m.sb.WriteString(style.PlayHeader.Render(m.headerText(horizontalPadding)))
+	m.sb.WriteString(style.Title.Render(m.headerText(horizontalPadding)))
 	m.sb.WriteString("\n")
 }
 
@@ -708,7 +708,7 @@ func (m *Model) headerRows() int {
 func (m *Model) renderFooter(horizontalPadding int) {
 	m.sb.WriteString("\n")
 	m.sb.WriteString(strings.Repeat(" ", horizontalPadding))
-	m.sb.WriteString("← ↑ ↓ → — move, p — pause/resume, q — quit\n")
+	m.sb.WriteString(style.Footer.Render("← ↑ ↓ → — move, p — pause/resume, q — quit\n"))
 }
 
 //
