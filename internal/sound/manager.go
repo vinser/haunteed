@@ -35,6 +35,7 @@ const (
 	LOSE_LIFE   = "lose_life.wav"   // Lose a life and start respawning
 	GAME_OVER   = "game_over.wav"   // Game over
 	HIGH_SCORE  = "high_score.wav"  // New high score
+	QUIT        = "quit.wav"        // Quit game
 	// Transitions
 	TRANSITION_UP   = "transition_up.wav"   // Up stairs
 	TRANSITION_DOWN = "transition_down.wav" // Down stairs
