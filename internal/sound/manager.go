@@ -284,6 +284,9 @@ func (mgr *Manager) PlayRandomWithVolume(volume float64, sampleNames ...string) 
 // StopListed stops playback of the specified samples by name.
 // If a sample is not currently playing, it is ignored.
 func (mgr *Manager) StopListed(names ...string) {
+	if mgr == nil || mgr.ctrl == nil {
+		return
+	}
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 	for _, name := range names {
@@ -319,6 +322,19 @@ func (mgr *Manager) Unmute() {
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 	mgr.vol.Silent = false
+}
+
+// Initialize creates and loads a sound manager.
+// It returns the manager and a boolean indicating if initialization failed (and thus should be muted).
+func Initialize() (*Manager, bool) {
+	soundMgr, err := NewManager(CommonSampleRate)
+	if err != nil {
+		return nil, true // Muted due to init error
+	}
+	if err := soundMgr.LoadSamples(); err != nil {
+		return nil, true // Muted due to load error
+	}
+	return soundMgr, false
 }
 
 // Close stops the speaker and frees resources.

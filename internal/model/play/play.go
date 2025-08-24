@@ -36,6 +36,7 @@ type TerminalDimensions struct {
 
 type Model struct {
 	state             *state.State
+	soundManager      *sound.Manager
 	floor             *floor.Floor
 	score             *score.Score
 	haunteed          *dweller.Haunteed
@@ -158,7 +159,7 @@ func windowSizeCmd(width, height int) tea.Cmd {
 }
 
 // New returns a new play model.
-func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, floorVisibility bool) Model {
+func New(s *state.State, sm *sound.Manager, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, floorVisibility bool) Model {
 	rng := rand.New(rand.NewSource(s.FloorSeeds[f.Index]))
 	ghosts := dweller.PlaceGhosts(f.Index, s.SpriteSize, s.GameMode, f.Maze.Width(), f.Maze.Height(), f.Maze.DenWidth(), f.Maze.DenHeight(), rng)
 	ghostTick := f.GhostTickInterval
@@ -172,6 +173,7 @@ func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, f
 
 	m := Model{
 		state:             s,
+		soundManager:      sm,
 		floor:             f,
 		score:             sc,
 		haunteed:          h,
@@ -189,7 +191,7 @@ func New(s *state.State, f *floor.Floor, sc *score.Score, h *dweller.Haunteed, f
 	}
 
 	if m.shouldPlayFuseSound() {
-		m.state.SoundManager.PlayLoopWithVolume(sound.FUSE_ARC, 2)
+		m.soundManager.PlayLoopWithVolume(sound.FUSE_ARC, 2)
 	}
 
 	return m
@@ -212,10 +214,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "p": // Toggle pause
 			m.paused = !m.paused
 			if m.paused {
-				m.state.SoundManager.PlayLoopWithVolume(sound.PAUSE_GAME, 0)
+				m.soundManager.PlayLoopWithVolume(sound.PAUSE_GAME, 0)
 				return m, nil // Game is paused, no more ticks
 			} else {
-				m.state.SoundManager.StopListed(sound.PAUSE_GAME)
+				m.soundManager.StopListed(sound.PAUSE_GAME)
 			}
 			return m, tickGhosts() // Game is resumed, start ticking again
 		}
@@ -261,7 +263,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				if tile == floor.CrumblingWall {
 					if m.powerMode {
 						m.floor.BreakWall(nextPos.X, nextPos.Y)
-						m.state.SoundManager.Play(sound.WALL_BREAK)
+						m.soundManager.Play(sound.WALL_BREAK)
 						canMove = true
 					}
 				} else if tile != floor.Wall {
@@ -270,11 +272,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			if canMove {
 				m.haunteed.SetPos(nextPos)
-				m.state.SoundManager.Play(sound.STEP_CREAKY)
+				m.soundManager.Play(sound.STEP_CREAKY)
 				// Update viewport to follow player if using scrolling
 				m.centerViewportOnPlayer()
 			} else {
-				m.state.SoundManager.Play(sound.STEP_BUMP)
+				m.soundManager.Play(sound.STEP_BUMP)
 			}
 		}
 
@@ -288,9 +290,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			} else {
 				m.score.Add(10)
 			}
-			m.state.SoundManager.PlayWithVolume(sound.PICK_CRUMB, -1.5)
+			m.soundManager.PlayWithVolume(sound.PICK_CRUMB, -1.5)
 		case floor.PowerPellet:
-			m.state.SoundManager.Play(sound.EAT_PELLET)
+			m.soundManager.Play(sound.EAT_PELLET)
 			m.score.Add(50)
 			m.powerMode = true
 			m.powerModeUntil = time.Now().Add(frightenedPeriod)
@@ -300,11 +302,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		case floor.Fuse:
 			m.fullVisibility = !m.fullVisibility
-			m.state.SoundManager.Play(sound.FUSE_TOGGLE)
+			m.soundManager.Play(sound.FUSE_TOGGLE)
 			if m.shouldPlayFuseSound() {
-				m.state.SoundManager.PlayLoopWithVolume(sound.FUSE_ARC, 2)
+				m.soundManager.PlayLoopWithVolume(sound.FUSE_ARC, 2)
 			} else {
-				m.state.SoundManager.StopListed(sound.FUSE_ARC)
+				m.soundManager.StopListed(sound.FUSE_ARC)
 			}
 			return m, toggleVisibilityCmd(m.floor.Index, m.fullVisibility)
 		case floor.Start:
@@ -349,7 +351,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if htPos == g.Pos() {
 			switch g.State() {
 			case dweller.Frightened: // eat the ghost
-				m.state.SoundManager.Play(sound.KILL_GHOST)
+				m.soundManager.Play(sound.KILL_GHOST)
 				m.score.AddGhostPoints()
 				g.SetState(dweller.Eaten)
 			case dweller.Chase: // lose a life
@@ -359,7 +361,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 					return m, gameOverCmd(score)
 				}
 				// enter respawn mode
-				m.state.SoundManager.PlayWithVolume(sound.LOSE_LIFE, 2)
+				m.soundManager.PlayWithVolume(sound.LOSE_LIFE, 2)
 				return m, respawnCmd(m.haunteed.Lives())
 			}
 		}
@@ -685,16 +687,16 @@ func (m *Model) headerText(horizontalPadding int) string {
 			b.WriteString(fmt.Sprintf("Latitude: %.4f, Longitude: %.4f, Timezone: %s\n", m.state.LocationInfo.Lat, m.state.LocationInfo.Lon, m.state.LocationInfo.Timezone))
 			// Second line: mode/night/floor
 			b.WriteString(padString)
-			b.WriteString(fmt.Sprintf("Mode: %s, Night: %s  Floor: %d\n", m.state.GameMode, m.state.NightOption, m.floor.Index))
+			b.WriteString(fmt.Sprintf("Mode: %s, Night: %s  Floor: %d  Lives: %d\n", m.state.GameMode, m.state.NightOption, m.floor.Index, m.haunteed.Lives()))
 		} else {
 			// One line: mode/floor
 			b.WriteString("\n")
 			b.WriteString(padString)
-			b.WriteString(fmt.Sprintf("Mode: %s  Floor: %d\n", m.state.GameMode, m.floor.Index))
+			b.WriteString(fmt.Sprintf("Mode: %s  Floor: %d  Lives: %d\n", m.state.GameMode, m.floor.Index, m.haunteed.Lives()))
 		}
 		// Final line: score/lives
 		b.WriteString(padString)
-		b.WriteString(fmt.Sprintf("Score: %d  High Score: %d  Lives: %d", m.score.Get(), m.score.GetHigh(), m.haunteed.Lives()))
+		b.WriteString(fmt.Sprintf("Score: %d  High Score: %d by %s", m.score.Get(), m.score.GetHigh(), m.score.GetHighNick()))
 	}
 	return b.String()
 }

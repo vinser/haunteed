@@ -11,27 +11,32 @@ import (
 	"hash/crc32"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/denisbrodbeck/machineid"
 	"github.com/vinser/haunteed/internal/geoip"
-	"github.com/vinser/haunteed/internal/sound"
 )
 
+// HighScore holds a single high score entry.
+
+type HighScore struct {
+	Nick  string `json:"nick"`
+	Score int    `json:"score"`
+}
+
 // State holds persistent game data such as high scores.
+
 type State struct {
 	GameMode     string             `json:"game_mode"`     // Current game mode: easy, noisy or crazy
 	NightOption  string             `json:"crazy_night"`   // Night option for crazy mode: never, always or real
 	SpriteSize   string             `json:"sprite_size"`   // Sprite size: small, medium, large
 	Mute         bool               `json:"mute"`          // Mute all sounds
 	FloorSeeds   map[int]int64      `json:"floor_seeds"`   // Seed for each floor to reproduce the same sequence of mazes
-	EasyScore    int                `json:"easy_score"`    // Easy mode high score
-	NoisyScore   int                `json:"noisy_score"`   // Noisy mode high score
-	CrazyScore   int                `json:"crazy_score"`   // Crazy mode high score
-	TestScore    int                `json:"test_score"`    // Test mode high score
+	EasyScores   []HighScore        `json:"easy_scores"`   // Easy mode high score
+	NoisyScores  []HighScore        `json:"noisy_scores"`  // Noisy mode high score
+	CrazyScores  []HighScore        `json:"crazy_scores"`  // Crazy mode high score
 	LocationInfo geoip.LocationInfo `json:"location_info"` // Location information
-	// Sounds       map[string]sound.Sound `json:"-"`             // Map of loaded sounds
-	SoundManager *sound.Manager `json:"-"` //
 }
 
 const (
@@ -39,7 +44,6 @@ const (
 	ModeEasy    = "easy"
 	ModeNoisy   = "noisy"
 	ModeCrazy   = "crazy"
-	ModeTest    = "test"
 	ModeDefault = ModeEasy
 
 	// Night options
@@ -53,6 +57,8 @@ const (
 	SpriteMedium  = "medium"
 	SpriteLarge   = "large"
 	SpriteDefault = SpriteMedium
+
+	maxHighScores = 5
 )
 
 var encryptionKey = generateKey()
@@ -67,42 +73,44 @@ func generateKey() []byte {
 	return sum[:]
 }
 
-// SetMute toggles the mute state and applies it to the sound manager.
+// SetMute toggles the mute state.
 func (s *State) SetMute(mute bool) {
 	s.Mute = mute
-	if s.SoundManager == nil {
-		return
-	}
-	if s.Mute {
-		s.SoundManager.Mute()
-	} else {
-		s.SoundManager.Unmute()
-	}
 }
 
 // UpdateAndSave updates the state with new game results and persists it to a file.
-func (s *State) UpdateAndSave(floor, score int, seed int64) error {
+func (s *State) UpdateAndSave(floor int, score int, seed int64, nick string) error {
 	switch s.GameMode {
 	case ModeEasy:
-		if score > s.EasyScore {
-			s.EasyScore = score
-		}
+		s.EasyScores = updateHighScores(s.EasyScores, score, nick)
 	case ModeNoisy:
-		if score > s.NoisyScore {
-			s.NoisyScore = score
-		}
+		s.NoisyScores = updateHighScores(s.NoisyScores, score, nick)
 	case ModeCrazy:
-		if score > s.CrazyScore {
-			s.CrazyScore = score
-		}
-	case ModeTest:
-		if score > s.TestScore {
-			s.TestScore = score
-		}
+		s.CrazyScores = updateHighScores(s.CrazyScores, score, nick)
 	}
 	// Ensure the seed for the current floor is saved if it's new.
 	s.FloorSeeds[floor] = seed
 	return s.Save()
+}
+
+func updateHighScores(scores []HighScore, newScore int, newNick string) []HighScore {
+	if newNick == "" {
+		newNick = "nowhere man (aka rootless)"
+	}
+	// Add the new score
+	scores = append(scores, HighScore{Nick: newNick, Score: newScore})
+
+	// Sort scores in descending order
+	sort.Slice(scores, func(i, j int) bool {
+		return scores[i].Score > scores[j].Score
+	})
+
+	// Keep only the top N scores
+	if len(scores) > maxHighScores {
+		scores = scores[:maxHighScores]
+	}
+
+	return scores
 }
 
 // Save persists the current state to an encrypted file with an integrity check.
@@ -152,16 +160,13 @@ func New() *State {
 	if err != nil {
 		loc = fallbackLocation
 	}
-	soundMgr, soundInitFailed := initializeSound()
 	s := &State{
 		GameMode:     ModeDefault,
 		NightOption:  NightDefault,
 		SpriteSize:   SpriteDefault,
 		FloorSeeds:   seeds,
 		LocationInfo: *loc,
-		SoundManager: soundMgr,
 	}
-	s.SetMute(soundInitFailed)
 	return s
 }
 
@@ -195,29 +200,19 @@ func Load() *State {
 		return New() // Corrupted JSON
 	}
 
-	// Initialize sound manager. If it fails, the game is forced into mute mode,
-	// but we still respect the user's saved preference for the next session.
-	soundMgr, soundInitFailed := initializeSound()
-	s.SoundManager = soundMgr
-	if soundInitFailed {
-		s.Mute = true
-	}
-	// Apply the loaded mute state to the newly created sound manager.
-	s.SetMute(s.Mute)
 	return s
 }
 
-// initializeSound creates and loads a sound manager.
-// It returns the manager and a boolean indicating if initialization failed (and thus should be muted).
-func initializeSound() (*sound.Manager, bool) {
-	soundMgr, err := sound.NewManager(sound.CommonSampleRate)
+func Reset() error {
+	path, err := getSavePath()
 	if err != nil {
-		return nil, true // Muted due to init error
+		return err
 	}
-	if err := soundMgr.LoadSamples(); err != nil {
-		return nil, true // Muted due to load error
+	// os.Remove returns an error if the file does not exist, which is fine.
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
 	}
-	return soundMgr, false
+	return os.Remove(path)
 }
 
 // ======================
@@ -268,22 +263,22 @@ func getSavePath() (string, error) {
 	return filepath.Join(saveDir, "state.dat"), nil
 }
 
-func (s *State) GetHighScore() int {
+func (s *State) GetHighScores() []HighScore {
+	var scores []HighScore
 	switch s.GameMode {
 	case ModeEasy:
-		return s.EasyScore
+		scores = s.EasyScores
 	case ModeNoisy:
-		return s.NoisyScore
+		scores = s.NoisyScores
 	case ModeCrazy:
-		return s.CrazyScore
-	case ModeTest:
-		return s.TestScore
+		scores = s.CrazyScores
 	default:
-		return 0
+		return scores
 	}
+	return scores
 }
 
-func (s *State) SetHighScore(score int) {
+func (s *State) SetHighScore(score int, nick string) {
 	max := func(a, b int) int {
 		if a > b {
 			return a
@@ -292,14 +287,13 @@ func (s *State) SetHighScore(score int) {
 	}
 	switch s.GameMode {
 	case ModeEasy:
-		s.EasyScore = max(s.EasyScore, score)
+		s.EasyScores[0].Score = max(s.EasyScores[0].Score, score)
+		s.EasyScores[0].Nick = nick
 	case ModeNoisy:
-		s.NoisyScore = max(s.NoisyScore, score)
+		s.NoisyScores[0].Score = max(s.NoisyScores[0].Score, score)
+		s.NoisyScores[0].Nick = nick
 	case ModeCrazy:
-		s.CrazyScore = max(s.CrazyScore, score)
-	case ModeTest:
-		s.TestScore = max(s.TestScore, score)
-	default:
-		s.EasyScore = max(s.EasyScore, score)
+		s.CrazyScores[0].Score = max(s.CrazyScores[0].Score, score)
+		s.CrazyScores[0].Nick = nick
 	}
 }
