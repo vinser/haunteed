@@ -8,9 +8,6 @@ import (
 	"github.com/vinser/haunteed/internal/style"
 )
 
-// Default lives count for Haunteed.
-const defaultLives = 3
-
 // Haunteed represents the player character.
 type Haunteed struct {
 	home         Position
@@ -22,19 +19,30 @@ type Haunteed struct {
 }
 
 // NewHaunteed returns a new Haunteed instance with default values.
-func NewHaunteed(home Position) *Haunteed {
+func NewHaunteed(home Position, gameMode string) *Haunteed {
+	var lives int
+	switch gameMode {
+	case state.ModeEasy:
+		lives = 5
+	case state.ModeNoisy:
+		lives = 4
+	case state.ModeCrazy:
+		lives = 3
+	default:
+		lives = 4 // Default to Noisy mode lives
+	}
 
 	return &Haunteed{
 		home:      home,
 		position:  home, // starting position
 		direction: Right,
-		lives:     defaultLives,
+		lives:     lives,
 	}
 }
 
 // PlaceHaunteed places new Haunteed in the maze
-func PlaceHaunteed(size string, p Position) *Haunteed {
-	haunteed := NewHaunteed(p)
+func PlaceHaunteed(size, gameMode string, p Position) *Haunteed {
+	haunteed := NewHaunteed(p, gameMode)
 	haunteed.SetHaunteedSprites(size)
 	return haunteed
 }
@@ -111,11 +119,6 @@ func (p *Haunteed) LoseLife() {
 // IsDead returns true if Haunteed has no lives left.
 func (p *Haunteed) IsDead() bool {
 	return p.lives <= 0
-}
-
-// ResetLives resets Haunteed's lives to the default value.
-func (p *Haunteed) ResetLives() {
-	p.lives = defaultLives
 }
 
 // AddLife adds a life to Haunteed.

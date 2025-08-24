@@ -82,7 +82,7 @@ func New() Model {
 	floorCache := make(map[int]*floor.Floor)
 	initialFloor := getFloor(0, state, floorCache, nil, nil)
 	startPos := dweller.Position{X: initialFloor.Maze.Start().X, Y: initialFloor.Maze.Start().Y}
-	haunteed := dweller.PlaceHaunteed(state.SpriteSize, startPos)
+	haunteed := dweller.PlaceHaunteed(state.SpriteSize, state.GameMode, startPos)
 	score := score.NewScore()
 	if highScores := state.GetHighScores(); len(highScores) > 0 {
 		score.SetHigh(highScores[0].Score)
@@ -496,7 +496,7 @@ func (m *Model) resetForNewGame() {
 	m.floorVisibility = make(map[int]bool)
 	m.floor = getFloor(0, m.state, m.floorCache, nil, nil)
 	startPos := dweller.Position{X: m.floor.Maze.Start().X, Y: m.floor.Maze.Start().Y}
-	m.haunteed = dweller.PlaceHaunteed(m.state.SpriteSize, startPos)
+	m.haunteed = dweller.PlaceHaunteed(m.state.SpriteSize, m.state.GameMode, startPos)
 	m.score.Reset()
 	if highScores := m.state.GetHighScores(); len(highScores) > 0 {
 		m.score.SetHigh(highScores[0].Score)
