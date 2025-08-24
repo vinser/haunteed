@@ -53,14 +53,18 @@ func (m *Model) SetSize(width, height int) {
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	return tick()
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if time.Now().After(m.quitUntil) {
-		return m, timedoutCmd()
+	switch msg.(type) {
+	case TickMsg:
+		if time.Now().After(m.quitUntil) {
+			return m, timedoutCmd()
+		}
+		return m, tick()
 	}
-	return m, tick()
+	return m, nil
 }
 
 const footer = ""
