@@ -34,6 +34,14 @@ type Model struct {
 	selectedSetting int
 }
 
+type ViewAboutMsg struct{}
+
+func viewAboutCmd() tea.Cmd {
+	return func() tea.Msg {
+		return ViewAboutMsg{}
+	}
+}
+
 type SaveSettingsMsg struct {
 	Mode       string
 	CrazyNight string
@@ -99,6 +107,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "a":
+			return m, viewAboutCmd()
 		case "s":
 			return m, saveSettingsCmd(m.mode, m.crazyNight, m.spriteSize, m.mute, m.reset)
 		case "esc":
@@ -107,10 +117,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.selectedSetting > 0 {
 				m.selectedSetting--
 			}
+			return m, nil
 		case "down":
 			if m.selectedSetting < numSettings-1 {
 				m.selectedSetting++
 			}
+			return m, nil
 		case "enter", " ":
 			if numSettings == 5 {
 				switch m.selectedSetting {
@@ -148,12 +160,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				}
 
 			}
+			return m, nil
 		}
-		return m, nil
 
 	}
 	return m, nil
 }
+
+
 
 func nextMode(current string) string {
 	switch current {
@@ -194,7 +208,7 @@ func nextSpriteSize(current string) string {
 	}
 }
 
-const footer = "↑ ↓ — select, space — change, s — save, esc — cancel"
+const footer = "↑ ↓ — select, space — change, a — about, s — save, esc — cancel"
 
 func (m Model) View() string {
 	return render.Page("Settings", m.renderOptions(), footer, m.width, m.height, m.termWidth, m.termHeight)

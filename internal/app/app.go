@@ -12,6 +12,7 @@ import (
 
 	"github.com/vinser/haunteed/internal/flags"
 	"github.com/vinser/haunteed/internal/floor"
+	"github.com/vinser/haunteed/internal/model/about"
 	"github.com/vinser/haunteed/internal/model/next"
 	"github.com/vinser/haunteed/internal/model/over"
 	"github.com/vinser/haunteed/internal/model/play"
@@ -29,6 +30,7 @@ type status uint
 const (
 	statusStartSplash status = iota
 	statusDoSettings
+	statusAbout
 	statusGameplay
 	statusFloorIntro
 	statusRespawning
@@ -47,6 +49,7 @@ type Model struct {
 	// models
 	splash  splash.Model
 	setup   setup.Model
+	about   about.Model
 	play    play.Model
 	next    next.Model
 	respawn respawn.Model
@@ -106,24 +109,31 @@ func getState() *state.State {
 }
 
 func setSplash(st *state.State) splash.Model {
-	width, height := getWidthHeight(st)
-	return splash.New(st, width, height)
+	width, height := getDefaultWidthHeight()
+	model := splash.New(st, width, height)
+	return model
 }
 
 func setSetup(st *state.State) setup.Model {
-	width, height := getWidthHeight(st)
+	width, height := getDefaultWidthHeight()
 	model := setup.New(st.GameMode, st.NightOption, st.SpriteSize, st.Mute, width, height)
 	return model
 }
 
+func setAbout(st *state.State) about.Model {
+	width, height := getDefaultWidthHeight()
+	model := about.New(st, width, height)
+	return model
+}
+
 func setRespawn(st *state.State, lives int) respawn.Model {
-	width, height := getWidthHeight(st)
+	width, height := getDefaultWidthHeight()
 	model := respawn.New(lives, width, height)
 	return model
 }
 
 func setNext(st *state.State, index int) next.Model {
-	width, height := getWidthHeight(st)
+	width, height := getDefaultWidthHeight()
 	model := next.New(index, width, height)
 	return model
 }
@@ -139,7 +149,7 @@ func setGameOver(st *state.State, score int) over.Model {
 			st.SoundManager.PlayLoop(sound.INTRO)
 		})
 	}
-	width, height := getWidthHeight(st)
+	width, height := getDefaultWidthHeight()
 	model := over.New(st.GameMode, score, highScore, width, height)
 	return model
 }
@@ -147,20 +157,24 @@ func setGameOver(st *state.State, score int) over.Model {
 func setQuit(st *state.State) quit.Model {
 	st.SoundManager.StopAll()
 	st.SoundManager.Play(sound.QUIT)
-	width, height := getWidthHeight(st)
+	width, height := getDefaultWidthHeight()
 	model := quit.New(width, height)
 	return model
+}
+
+func getDefaultWidthHeight() (int, int) {
+	return getWidthHeight(&state.State{})
 }
 
 func getWidthHeight(st *state.State) (int, int) {
 	mazeWidth, mazeHeight := getMazeDimensions(st.GameMode)
 	var spriteWidth, spriteHeight int
 	switch st.SpriteSize {
-	case "small":
+	case state.SpriteSmall:
 		spriteWidth, spriteHeight = 1, 1
-	case "medium":
+	case state.SpriteMedium:
 		spriteWidth, spriteHeight = 2, 1
-	case "large":
+	case state.SpriteLarge:
 		spriteWidth, spriteHeight = 4, 2
 	default:
 		spriteWidth, spriteHeight = 2, 1 // Default to medium
@@ -226,12 +240,14 @@ func setFloorVisibility(f *floor.Floor, st *state.State) {
 
 func getMazeDimensions(gameMode string) (width, height int) {
 	switch gameMode {
+	case state.ModeEasy:
+		return floor.ModeEasyWidth, floor.ModeEasyHeight
 	case state.ModeNoisy:
 		return floor.ModeNoisyWidth, floor.ModeNoisyHeight
 	case state.ModeCrazy:
 		return floor.ModeCrazyWidth, floor.ModeCrazyHeight
-	default: // state.ModeEasy
-		return floor.ModeEasyWidth, floor.ModeEasyHeight
+	default: // state.ModeNoisy
+		return floor.ModeNoisyWidth, floor.ModeNoisyHeight
 	}
 }
 
@@ -250,7 +266,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = statusQuitting // Set status to show quit message
 			m.quit = setQuit(m.state)
 			m.quit.SetSize(m.termWidth, m.termHeight)
-			return m, nil
+			return m, m.quit.Init()
 		case "m": // mute/unmute
 			m.state.SetMute(!m.state.Mute)
 			return m, nil
@@ -265,6 +281,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.splash.SetSize(msg.Width, msg.Height)
 		case statusDoSettings:
 			m.setup.SetSize(msg.Width, msg.Height)
+		case statusAbout:
+			m.about.SetSize(msg.Width, msg.Height)
 		case statusGameplay:
 			// Create a custom window size message for the play model
 			playWindowSizeMsg := play.WindowSizeMsg{
@@ -305,6 +323,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case statusDoSettings:
 		switch msg := msg.(type) {
+		case setup.ViewAboutMsg:
+			m.status = statusAbout
+			m.about = setAbout(m.state)
+			m.about.SetSize(m.termWidth, m.termHeight)
 		case setup.SaveSettingsMsg:
 			m.status = statusGameplay
 			// Preserve the sound manager as it's a global resource that persists across state resets.
@@ -324,6 +346,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resetPlayModel()
 		default:
 			m.setup, cmd = m.setup.Update(msg)
+		}
+		cmds = append(cmds, cmd)
+	case statusAbout:
+		switch msg := msg.(type) {
+		case about.CloseAboutMsg:
+			m.status = statusDoSettings
+			m.setup = setSetup(m.state)
+			m.setup.SetSize(m.termWidth, m.termHeight)
+		default:
+			m.about, cmd = m.about.Update(msg)
 		}
 		cmds = append(cmds, cmd)
 	case statusGameplay:
@@ -457,6 +489,8 @@ func (m Model) View() string {
 		return m.splash.View()
 	case statusDoSettings:
 		return m.setup.View()
+	case statusAbout:
+		return m.about.View()
 	case statusGameplay:
 		return m.play.View()
 	case statusFloorIntro:
