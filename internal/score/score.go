@@ -3,6 +3,7 @@ package score
 type Score struct {
 	value             int
 	high              int
+	nick              string
 	eatenGhostsStreak int
 }
 
@@ -43,4 +44,12 @@ func (s *Score) GetHigh() int {
 
 func (s *Score) SetHigh(value int) {
 	s.high = value
+}
+
+func (s *Score) SetNick(value string) {
+	s.nick = value
+}
+
+func (s *Score) GetHighNick() string {
+	return s.nick
 }

@@ -22,7 +22,7 @@ var (
 	SetupItemSelected = lipgloss.NewStyle().Foreground(lipgloss.Color("204")).Bold(true) // Pinkish-reddish purple
 	PlayHeader        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("82"))  // Green
 
-	HighScore = lipgloss.NewStyle().Foreground(lipgloss.Color("9")) // Bright red
+	HighScore = lipgloss.NewStyle().Foreground(lipgloss.Color("204")) // Pinkish-reddish purple
 	// Page styles
 	TopPattern = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))            // Pinkish-reddish purple
 	Title      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("228")) // Bright yellow
