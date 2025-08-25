@@ -16,7 +16,10 @@ type Haunteed struct {
 	lives        int
 	brightSprite []string
 	dimSprite    []string
+	lastHitTime  time.Time
 }
+
+const hitCooldown = 1 * time.Second
 
 // NewHaunteed returns a new Haunteed instance with default values.
 func NewHaunteed(home Position, gameMode string) *Haunteed {
@@ -37,6 +40,7 @@ func NewHaunteed(home Position, gameMode string) *Haunteed {
 		position:  home, // starting position
 		direction: Right,
 		lives:     lives,
+		lastHitTime: time.Now().Add(-hitCooldown), // Initialize to allow immediate hit
 	}
 }
 
@@ -111,8 +115,13 @@ func (p *Haunteed) Lives() int {
 
 // LoseLife reduces Haunteed's lives by 1.
 func (p *Haunteed) LoseLife() {
+	if time.Since(p.lastHitTime) < hitCooldown {
+		return // Still in cooldown period
+	}
+
 	if p.lives > 0 {
 		p.lives--
+		p.lastHitTime = time.Now()
 	}
 }
 
