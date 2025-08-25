@@ -36,6 +36,7 @@ Run the binary:
 
 ## Tips for Sysadmins
 - **Esc** is not just a key — it’s a lifestyle.
+- The crazy basement always spells doom.
 - Ghosts don’t respect firewall rules.
 - The scariest log is the one that’s empty.
 - UPS doesn’t mean “Uninterruptible Paranormal Supply.”
