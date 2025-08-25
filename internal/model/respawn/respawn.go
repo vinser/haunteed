@@ -78,5 +78,5 @@ func (m Model) View() string {
 }
 
 func (m Model) renderContent() string {
-	return fmt.Sprintf("Lives: %d\nGet ready to continue", m.lives)
+	return fmt.Sprintf("Lives left: %d\nGet ready to continue", m.lives)
 }
