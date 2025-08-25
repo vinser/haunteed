@@ -26,7 +26,7 @@ type Model struct {
 	termHeight int
 
 	status     status
-	mode       string
+	state      *state.State
 	score      int
 	highScores []state.HighScore
 	textInput  textinput.Model
@@ -61,7 +61,7 @@ func saveHighScoreCmd(nick string) tea.Cmd {
 	}
 }
 
-func New(mode string, score int, highScores []state.HighScore, width, height int) Model {
+func New(st *state.State, score int, highScores []state.HighScore, width, height int) Model {
 	if width < lipgloss.Width(footer) {
 		width = lipgloss.Width(footer)
 	}
@@ -88,7 +88,7 @@ func New(mode string, score int, highScores []state.HighScore, width, height int
 		width:      width,
 		height:     height,
 		status:     status,
-		mode:       mode,
+		state:      st,
 		score:      score,
 		highScores: highScores,
 		textInput:  ti,
@@ -152,7 +152,7 @@ func (m Model) View() string {
 func (m Model) renderContent() string {
 	if m.status == statusEntering {
 		var input []string
-		input = append(input, style.HighScore.Render(fmt.Sprintf("New %s High score: %d !!!", m.mode, m.score)))
+		input = append(input, style.HighScore.Render(fmt.Sprintf("New %s High score: %d !!!", m.state.GameMode, m.score)))
 
 		input = append(input, "") // Add a blank line
 		// blockStyle := lipgloss.NewStyle().Inline(false).Align(lipgloss.Left)
@@ -169,9 +169,9 @@ func (m Model) renderContent() string {
 	var content []string
 
 	if len(m.highScores) == 0 || m.score > m.highScores[len(m.highScores)-1].Score {
-		content = append(content, style.HighScore.Render(fmt.Sprintf("New %s High score: %d !!!", m.mode, m.score)))
+		content = append(content, style.HighScore.Render(fmt.Sprintf("New %s High score: %d !!!", m.state.GameMode, m.score)))
 	} else {
-		content = append(content, fmt.Sprintf("Your %s score: %d", m.mode, m.score))
+		content = append(content, fmt.Sprintf("Your %s score: %d", m.state.GameMode, m.score))
 	}
 
 	content = append(content, "") // Add a blank line
@@ -197,4 +197,8 @@ func calcDidgits(hs []state.HighScore) int {
 
 func (m Model) Score() int {
 	return m.score
+}
+
+func (m *Model) SetHighScores(highScores []state.HighScore) {
+	m.highScores = highScores
 }

@@ -156,15 +156,7 @@ func setNext(st *state.State, index int) next.Model {
 }
 
 func (m *Model) setGameOver(score int) over.Model {
-	var highScores []state.HighScore
-	switch m.state.GameMode {
-	case state.ModeEasy:
-		highScores = m.state.EasyScores
-	case state.ModeNoisy:
-		highScores = m.state.NoisyScores
-	case state.ModeCrazy:
-		highScores = m.state.CrazyScores
-	}
+	highScores := m.state.GetHighScores()
 
 	highScore := 0
 	if len(highScores) > 0 {
@@ -181,7 +173,7 @@ func (m *Model) setGameOver(score int) over.Model {
 		})
 	}
 	width, height := getDefaultWidthHeight()
-	model := over.New(m.state.GameMode, score, highScores, width, height)
+	model := over.New(m.state, score, highScores, width, height)
 	return model
 }
 
@@ -467,6 +459,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err := m.state.UpdateAndSave(m.floor.Index, m.score.Get(), m.floor.Seed, msg.Nick); err != nil {
 				log.Fatal(err)
 			}
+			m.over.SetHighScores(m.state.GetHighScores())
 		case over.PlayAgainMsg:
 			m.soundManager.StopListed(sound.INTRO)
 			m.resetForNewGame()
