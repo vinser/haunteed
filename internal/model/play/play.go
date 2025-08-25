@@ -304,7 +304,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.fullVisibility = !m.fullVisibility
 			m.soundManager.Play(sound.FUSE_TOGGLE)
 			if m.shouldPlayFuseSound() {
-				m.soundManager.PlayLoopWithVolume(sound.FUSE_ARC, 2)
+				m.soundManager.PlayLoop(sound.FUSE_ARC)
 			} else {
 				m.soundManager.StopListed(sound.FUSE_ARC)
 			}
@@ -696,7 +696,12 @@ func (m *Model) headerText(horizontalPadding int) string {
 		}
 		// Final line: score/lives
 		b.WriteString(padString)
-		b.WriteString(fmt.Sprintf("Score: %d  High Score: %d by %s", m.score.Get(), m.score.GetHigh(), m.score.GetHighNick()))
+		highScore := m.score.GetHigh()
+		if highScore > 0 {
+			b.WriteString(fmt.Sprintf("Score: %d  High Score: %d by %s", m.score.Get(), m.score.GetHigh(), m.score.GetHighNick()))
+		} else {
+			b.WriteString(fmt.Sprintf("Score: %d  High Score: —", m.score.Get()))
+		}
 	}
 	return b.String()
 }
