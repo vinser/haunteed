@@ -231,7 +231,7 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 		case CrumblingWall:
 			return []string{"░"}
 		case Dot:
-			if mode == state.ModeNoisy {
+			if mode == state.ModeNoisy || (mode == state.ModeCrazy) {
 				return []string{" "}
 			}
 			return []string{"⋅"}
@@ -253,7 +253,7 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 		case CrumblingWall:
 			return []string{"░░"}
 		case Dot:
-			if mode == state.ModeNoisy {
+			if mode == state.ModeNoisy || (mode == state.ModeCrazy) {
 				return []string{"  "}
 			}
 			return []string{"╺╸"}
@@ -275,7 +275,7 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 		case CrumblingWall:
 			return []string{"░░░░", "░░░░"}
 		case Dot:
-			if mode == state.ModeNoisy {
+			if mode == state.ModeNoisy || (mode == state.ModeCrazy) {
 				return []string{"    ", "    "}
 			}
 			return []string{" ▗▖ ", " ▝▘ "}
