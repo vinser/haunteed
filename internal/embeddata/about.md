@@ -25,6 +25,7 @@ It's not a simulation, it's not serious — it’s a retro-style distraction whi
 - The crazy basement always spells doom.
 - Ghosts don’t respect firewall rules.
 - The scariest log is the one that’s empty.
+- Never sell your life for breadcrumbs.
 - UPS doesn’t mean “Uninterruptible Paranormal Supply.”
 - Pellets are like **sudo**: they help to kill bugs and penetrate maze firewalls. Use them wisely, or regret later.
 - **Pro Tip:** Playing *Haunteed* on a production server is technically possible… but your coworkers might not appreciate your high scores.
