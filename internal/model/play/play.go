@@ -52,6 +52,7 @@ type Model struct {
 	sb                *strings.Builder
 	fullVisibility    bool
 	paused            bool
+	gotCrumbs         bool
 	terminal          TerminalDimensions // Terminal dimensions
 	viewport          Viewport           // Current viewport for scrolling
 }
@@ -220,6 +221,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.soundManager.StopListed(sound.PAUSE_GAME)
 			}
 			return m, tickGhosts() // Game is resumed, start ticking again
+		case "c":
+			if !m.paused && !m.gotCrumbs && m.state.GameMode == state.ModeCrazy && m.haunteed.Lives() > 1 {
+				m.floor.ShowCrumbs(m.floor.Index, m.state.SpriteSize)
+				m.haunteed.LoseLife()
+				m.gotCrumbs = true
+				return m, tickGhosts()
+			}
 		}
 	case WindowSizeMsg:
 		// Handle terminal resize
@@ -285,11 +293,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 		switch tile {
 		case floor.Dot:
-			if m.state.GameMode == state.ModeNoisy {
-				m.score.Add(20)
-			} else {
-				m.score.Add(10)
+			points := 0
+			switch m.state.GameMode {
+			case state.ModeEasy:
+				points = 5
+			case state.ModeNoisy:
+				points = 10
+			case state.ModeCrazy:
+				points = 15
+				if !m.fullVisibility {
+					points *= 2
+				}
+				if m.gotCrumbs {
+					points = 5
+				}
 			}
+			m.score.Add(points)
 			m.soundManager.PlayWithVolume(sound.PICK_CRUMB, -1.5)
 		case floor.PowerPellet:
 			m.soundManager.Play(sound.EAT_PELLET)
@@ -715,7 +734,14 @@ func (m *Model) headerRows() int {
 func (m *Model) renderFooter(horizontalPadding int) {
 	m.sb.WriteString("\n")
 	m.sb.WriteString(strings.Repeat(" ", horizontalPadding))
-	m.sb.WriteString(style.Footer.Render("← ↑ ↓ → — move, p — pause/resume, q — quit\n"))
+	switch {
+	case m.paused:
+		m.sb.WriteString(style.Footer.Render("p — resume, q — quit\n"))
+	case m.state.GameMode == state.ModeCrazy && !m.gotCrumbs && m.haunteed.Lives() > 1:
+		m.sb.WriteString(style.Footer.Render("← ↑ ↓ → — move, p — pause, c — crumbs, q — quit\n"))
+	default:
+		m.sb.WriteString(style.Footer.Render("← ↑ ↓ → — move, p — pause, q — quit\n"))
+	}
 }
 
 //

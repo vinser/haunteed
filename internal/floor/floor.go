@@ -157,6 +157,16 @@ func (f *Floor) RenderAt(x, y int) []string {
 	return sprite
 }
 
+// ShowCrumbs make crumbs look like in easy mode
+func (f *Floor) ShowCrumbs(floorNum int, spriteSize string) {
+	brightStyle, _ := getFloorItemStyle(floorNum, Dot)
+	var sprite []string
+	for _, s := range getFloorSprite(spriteSize, state.ModeEasy, Dot) {
+		sprite = append(sprite, brightStyle.Render(s))
+	}
+	f.Sprites[Dot] = sprite
+}
+
 func setFloorSprites(floorNum int, spriteSize, gameMode string) (map[ItemType][]string, []string) {
 	var sprites = map[ItemType][]string{
 		Wall:          nil,
@@ -231,7 +241,7 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 		case CrumblingWall:
 			return []string{"░"}
 		case Dot:
-			if mode == state.ModeNoisy || (mode == state.ModeCrazy) {
+			if mode != state.ModeEasy { // Bread crumbs are only for easy game mode
 				return []string{" "}
 			}
 			return []string{"⋅"}
@@ -253,7 +263,7 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 		case CrumblingWall:
 			return []string{"░░"}
 		case Dot:
-			if mode == state.ModeNoisy || (mode == state.ModeCrazy) {
+			if mode != state.ModeEasy {
 				return []string{"  "}
 			}
 			return []string{"╺╸"}
@@ -275,7 +285,7 @@ func getFloorSprite(size string, mode string, item ItemType) []string {
 		case CrumblingWall:
 			return []string{"░░░░", "░░░░"}
 		case Dot:
-			if mode == state.ModeNoisy || (mode == state.ModeCrazy) {
+			if mode != state.ModeEasy {
 				return []string{"    ", "    "}
 			}
 			return []string{" ▗▖ ", " ▝▘ "}
