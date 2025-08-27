@@ -167,8 +167,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-
-
 func nextMode(current string) string {
 	switch current {
 	case "easy":
@@ -222,7 +220,7 @@ func (m Model) renderOptions() string {
 
 	options := []option{{"Game mode", m.mode}}
 	if m.mode == state.ModeCrazy {
-		options = append(options, option{"Night lighting", m.crazyNight})
+		options = append(options, option{"Night shadows", m.crazyNight})
 	}
 	options = append(options, option{"Sprite size", m.spriteSize})
 	options = append(options, option{"Mute all sounds", checkBox(m.mute)})
