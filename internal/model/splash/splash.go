@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/vinser/haunteed/internal/render"
 	"github.com/vinser/haunteed/internal/state"
 	"github.com/vinser/haunteed/internal/style"
 )
@@ -325,10 +326,7 @@ func (m Model) View() string {
 		m.drawHaunteed()
 	}
 	view := m.renderGrid()
-	if m.termWidth > 0 && m.termHeight > 0 {
-		return lipgloss.Place(m.termWidth, m.termHeight, lipgloss.Center, lipgloss.Center, view)
-	}
-	return view
+	return render.Page("", view, footer, m.width, m.height, m.termWidth, m.termHeight)
 }
 
 func (m *Model) clearGrid() {
@@ -446,7 +444,5 @@ func (m *Model) renderGrid() string {
 		}
 		m.sb.WriteRune('\n')
 	}
-	m.sb.WriteString(style.Footer.Render(footer))
-	m.sb.WriteString("\n")
 	return m.sb.String()
 }
