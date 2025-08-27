@@ -46,10 +46,8 @@ const (
 	// Ghosts' den size
 	DenWidth  = 5
 	DenHeight = 3
-	// Maze generation Bias difines maze complexity
-	Bias = 0.2
-)
-const (
+
+	// Maze dimensions
 	ModeEasyWidth   = 21
 	ModeEasyHeight  = 15
 	ModeNoisyWidth  = 31
@@ -79,7 +77,7 @@ func New(index int, seed int64, startPoint, endPoint *maze.Point, width, height 
 	if err != nil {
 		log.Fatal(err)
 	}
-	m.Generate(seed, startPoint, endPoint, nil, "top", Bias)
+	m.Generate(seed, startPoint, endPoint, nil, "top", getBias(gameMode, index))
 
 	items := newItems(m)
 
@@ -115,6 +113,27 @@ func New(index int, seed int64, startPoint, endPoint *maze.Point, width, height 
 		GhostTickInterval: ghostInterval(index),
 		Sprites:           sprites,
 		DimFuseSprite:     dimFuseSprite,
+	}
+}
+
+// getBias calculates bias that controls the straightness of paths
+// The lower bias makes paths more curly
+func getBias(gameMode string, floorIndex int) float64 {
+	const (
+		easyBias  = 0.6
+		noisyBias = 0.5
+		crazyBias = 0.2
+		minBias   = 0.1
+	)
+	switch gameMode {
+	case state.ModeEasy:
+		return min((easyBias - float64(floorIndex)*0.02), noisyBias)
+	case state.ModeNoisy:
+		return min((noisyBias - float64(floorIndex)*0.05), crazyBias)
+	case state.ModeCrazy:
+		return min((crazyBias - float64(floorIndex)*0.02), minBias)
+	default: // state.ModeNoisy
+		return noisyBias
 	}
 }
 
