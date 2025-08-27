@@ -19,7 +19,7 @@ type Haunteed struct {
 	lastHitTime  time.Time
 }
 
-const hitCooldown = 1 * time.Second
+const hitCooldown = 100 * time.Millisecond
 
 // NewHaunteed returns a new Haunteed instance with default values.
 func NewHaunteed(home Position, gameMode string) *Haunteed {
@@ -36,10 +36,10 @@ func NewHaunteed(home Position, gameMode string) *Haunteed {
 	}
 
 	return &Haunteed{
-		home:      home,
-		position:  home, // starting position
-		direction: Right,
-		lives:     lives,
+		home:        home,
+		position:    home, // starting position
+		direction:   Right,
+		lives:       lives,
 		lastHitTime: time.Now().Add(-hitCooldown), // Initialize to allow immediate hit
 	}
 }

@@ -267,7 +267,7 @@ func MoveGhosts(ghosts []*Ghost, f *floor.Floor, powerMode bool, htPos Position,
 			if time.Now().Before(g.releaseTime) {
 				continue // Delay exit
 			}
-			if g.Pos() == g.exitTarget {
+			if g.Pos().X == g.exitTarget.X && abs(g.Pos().Y-g.exitTarget.Y) <= 1 { // Fix exitTarget inaccuracy
 				g.SetState(Chase)
 			} else {
 				g.moveToTarget(f, g.exitTarget, ghosts)
