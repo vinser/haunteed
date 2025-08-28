@@ -20,7 +20,7 @@ func Page(title, renderedContent, footer string, width, height, termWidth, termH
 	// renderedContent := content
 
 	// Render the footer
-	if len(footer) < width {
+	if lipgloss.Width(footer) < width {
 		footer = strings.TrimSuffix(footer, "\n") + " " + strings.Repeat("/", width-lipgloss.Width(footer)-1)
 	}
 	renderedFooter := style.Footer.Render(footer)
