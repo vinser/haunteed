@@ -7,12 +7,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vinser/haunteed/internal/ambilite"
 	"github.com/vinser/haunteed/internal/dweller"
-	"github.com/vinser/haunteed/internal/geoip"
-	"github.com/vinser/haunteed/internal/sound"
-
 	"github.com/vinser/haunteed/internal/flags"
 	"github.com/vinser/haunteed/internal/floor"
+	"github.com/vinser/haunteed/internal/geoip"
 	"github.com/vinser/haunteed/internal/model/about"
+	"github.com/vinser/haunteed/internal/model/bosskey"
 	"github.com/vinser/haunteed/internal/model/next"
 	"github.com/vinser/haunteed/internal/model/over"
 	"github.com/vinser/haunteed/internal/model/play"
@@ -21,6 +20,7 @@ import (
 	"github.com/vinser/haunteed/internal/model/setup"
 	"github.com/vinser/haunteed/internal/model/splash"
 	"github.com/vinser/haunteed/internal/score"
+	"github.com/vinser/haunteed/internal/sound"
 	"github.com/vinser/haunteed/internal/state"
 	"github.com/vinser/maze"
 )
@@ -48,14 +48,16 @@ type Model struct {
 	floor           *floor.Floor
 	score           *score.Score
 	// models
-	splash  splash.Model
-	setup   setup.Model
-	about   about.Model
-	play    play.Model
-	next    next.Model
-	respawn respawn.Model
-	over    over.Model
-	quit    quit.Model
+	splash         splash.Model
+	setup          setup.Model
+	about          about.Model
+	play           play.Model
+	next           next.Model
+	respawn        respawn.Model
+	over           over.Model
+	quit           quit.Model
+	bosskey        bosskey.Model
+	bosskeyVisible bool
 	// terminal size cache
 	termWidth  int
 	termHeight int
@@ -98,6 +100,7 @@ func New() Model {
 		floor:           initialFloor,
 		score:           score,
 		splash:          splash,
+		bosskey:         bosskey.New(),
 	}
 }
 
@@ -275,16 +278,36 @@ func getMazeDimensions(gameMode string) (width, height int) {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.splash.Init(), m.over.Init())
+	return tea.Batch(m.splash.Init(), m.over.Init(), tea.DisableMouse)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.bosskeyVisible {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			if msg.String() == "b" {
+				m.bosskeyVisible = false
+				return m, nil
+			}
+		case bosskey.TickMsg:
+			newBosskey, cmd := m.bosskey.Update(msg)
+			m.bosskey = newBosskey
+			return m, cmd
+		}
+		return m, nil
+	}
+
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "b":
+			m.bosskeyVisible = true
+			m.bosskey.SetSize(m.termWidth, m.termHeight)
+			m.soundManager.StopAll()
+			return m, m.bosskey.Init()
 		case "ctrl+c", "q": // quit all app models
 			m.status = statusQuitting // Set status to show quit message
 			m.quit = m.setQuit()
@@ -303,6 +326,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Always remember the latest terminal size
 		m.termWidth = msg.Width
 		m.termHeight = msg.Height
+		m.bosskey.SetSize(msg.Width, msg.Height)
 		// Handle terminal resize by passing dimensions to the play model
 		switch m.status {
 		case statusStartSplash:
@@ -521,6 +545,9 @@ func (m *Model) resetPlayModelForRespawn() {
 }
 
 func (m Model) View() string {
+	if m.bosskeyVisible {
+		return m.bosskey.View()
+	}
 	switch m.status {
 	case statusStartSplash:
 		return m.splash.View()
