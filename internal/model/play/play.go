@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vinser/haunteed/internal/dweller"
 	floor "github.com/vinser/haunteed/internal/floor"
+	"github.com/vinser/haunteed/internal/model/motd"
 	"github.com/vinser/haunteed/internal/score"
 	"github.com/vinser/haunteed/internal/sound"
 	"github.com/vinser/haunteed/internal/state"
@@ -55,6 +56,7 @@ type Model struct {
 	gotCrumbs         bool
 	terminal          TerminalDimensions // Terminal dimensions
 	viewport          Viewport           // Current viewport for scrolling
+	motd              motd.Model
 }
 
 // GhostTickMsg is a tick message.
@@ -189,6 +191,7 @@ func New(s *state.State, sm *sound.Manager, f *floor.Floor, sc *score.Score, h *
 		fullVisibility:    floorVisibility,
 		terminal:          TerminalDimensions{Width: 80, Height: minTerminalHeight}, // Default minimal size
 		viewport:          Viewport{StartX: 0, StartY: 0, Width: minViewportWidth, Height: minViewportHeight},
+		motd:              motd.New(f.Maze.Width()*2, 1, 1*time.Minute),
 	}
 
 	if m.shouldPlayFuseSound() {
@@ -208,7 +211,13 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	// Handle pause/resume toggling first. This should work regardless of the paused state.
+	// Handle MOTD updates separately
+	if _, ok := msg.(motd.TickMsg); ok && m.paused {
+		newMotd, motdCmd := m.motd.Update(msg)
+		m.motd = newMotd
+		return m, motdCmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -216,11 +225,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.paused = !m.paused
 			if m.paused {
 				m.soundManager.PlayLoopWithVolume(sound.PAUSE_GAME, 0)
-				return m, nil // Game is paused, no more ticks
+				return m, m.motd.Init()
 			} else {
 				m.soundManager.StopListed(sound.PAUSE_GAME)
+				return m, tickGhosts() // Game is resumed, start ticking again
 			}
-			return m, tickGhosts() // Game is resumed, start ticking again
 		case "c":
 			if !m.paused && !m.gotCrumbs && m.state.GameMode == state.ModeCrazy && m.haunteed.Lives() > 1 {
 				m.floor.ShowCrumbs(m.floor.Index, m.state.SpriteSize)
@@ -236,6 +245,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// Force a complete viewport reset and recalculation
 		m.resetViewport()
 		m.updateViewport()
+		m.motd.SetWidth(m.terminal.Width)
 		return m, nil
 	}
 
@@ -475,6 +485,17 @@ func (m *Model) shouldScrollVertically() bool {
 	return mazeHeightRows > availableHeight
 }
 
+// shouldScroll check if maze should be scroll horizontally or/and vertically
+func (m *Model) shouldScroll() (scrollH, scrollV bool) {
+	wChar, hRows := m.getMazePixelDimensions()
+	headerH := m.headerRows()
+	footerH := 1
+	availableHeight := m.terminal.Height - headerH - footerH - 1
+	scrollH = wChar > m.terminal.Width
+	scrollV = hRows > availableHeight
+	return scrollH, scrollV
+}
+
 // getMazePixelDimensions returns the maze dimensions in characters and rows.
 func (m *Model) getMazePixelDimensions() (int, int) {
 	wChar, hRows := m.getSpriteCharDims()
@@ -490,7 +511,7 @@ func (m *Model) updateViewport() {
 	wChar, hRows := m.getSpriteCharDims()
 	headerH := m.headerRows()
 	footerH := 1
-	availableHeightRows := m.terminal.Height - headerH - footerH
+	availableHeightRows := m.terminal.Height - headerH - footerH - 1
 	if availableHeightRows < 1 {
 		availableHeightRows = 1
 	}
@@ -570,8 +591,7 @@ func (m *Model) centerViewportOnPlayer() {
 
 // render renders the maze with the appropriate scrolling and centering.
 func (m *Model) render() {
-	scrollH := m.shouldScrollHorizontally()
-	scrollV := m.shouldScrollVertically()
+	scrollH, scrollV := m.shouldScroll()
 
 	if scrollH || scrollV {
 		m.updateViewport()
@@ -606,24 +626,78 @@ func (m *Model) render() {
 	if centerV {
 		headerH := m.headerRows()
 		footerH := 1
-		availableHeight := m.terminal.Height - headerH - footerH
+		availableHeight := m.terminal.Height - headerH - footerH - 1
 		verticalPadding = (availableHeight - mazeHeightRows) / 2
 		if verticalPadding < 0 {
 			verticalPadding = 0
 		}
 	}
 
+	m.renderTopBar(mazeWidthChars, horizontalPadding)
 	for i := 0; i < verticalPadding; i++ {
 		m.sb.WriteString("\n")
 	}
 
-	// Draw game header
 	m.renderHeader(horizontalPadding)
 
 	m.renderMaze(startX, startY, viewW, viewH, horizontalPadding)
 
+	m.renderMOTD(mazeWidthChars, horizontalPadding)
+
 	// Controls footer (single line)
-	m.renderFooter(horizontalPadding)
+	m.renderFooter(mazeWidthChars, horizontalPadding)
+}
+
+// renderTopBar
+func (m *Model) renderTopBar(width, hPadding int) {
+	m.sb.WriteString(strings.Repeat(" ", hPadding))
+	m.sb.WriteString(style.TopPattern.Render(strings.Repeat("/", width)))
+	m.sb.WriteString("\n")
+}
+
+// renderHeader
+func (m *Model) renderHeader(hPadding int) {
+	m.sb.WriteString(style.Title.Render(m.headerText(hPadding)))
+	m.sb.WriteString("\n")
+}
+
+// headerText builds the header string based on game state. It always ends with a newline and may span multiple lines.
+func (m *Model) headerText(horizontalPadding int) string {
+	var b strings.Builder
+	padString := strings.Repeat(" ", horizontalPadding)
+	if m.paused {
+		b.WriteString("\n\n")
+		b.WriteString(padString)
+		b.WriteString("PAUSED")
+	} else {
+		if m.state.GameMode == state.ModeCrazy {
+			// First line: geo/time info (restored)
+			b.WriteString(padString)
+			b.WriteString(fmt.Sprintf("Latitude: %.4f, Longitude: %.4f, Timezone: %s\n", m.state.LocationInfo.Lat, m.state.LocationInfo.Lon, m.state.LocationInfo.Timezone))
+			// Second line: mode/night/floor
+			b.WriteString(padString)
+			b.WriteString(fmt.Sprintf("Mode: %s, Night: %s  Floor: %d  Lives: %d\n", m.state.GameMode, m.state.NightOption, m.floor.Index, m.haunteed.Lives()))
+		} else {
+			// One line: mode/floor
+			b.WriteString("\n")
+			b.WriteString(padString)
+			b.WriteString(fmt.Sprintf("Mode: %s  Floor: %d  Lives: %d\n", m.state.GameMode, m.floor.Index, m.haunteed.Lives()))
+		}
+		// Final line: score/lives
+		b.WriteString(padString)
+		highScore := m.score.GetHigh()
+		if highScore > 0 {
+			b.WriteString(fmt.Sprintf("Score: %d  High Score: %d by %s", m.score.Get(), m.score.GetHigh(), m.score.GetHighNick()))
+		} else {
+			b.WriteString(fmt.Sprintf("Score: %d  High Score: —", m.score.Get()))
+		}
+	}
+	return b.String()
+}
+
+// headerRows returns the number of terminal rows the header occupies
+func (m *Model) headerRows() int {
+	return 3
 }
 
 // renderMaze renders a specific viewport of the maze.
@@ -685,63 +759,38 @@ func (m *Model) renderMaze(startX, startY, width, height, horizontalPadding int)
 	}
 }
 
-// renderHeader
-func (m *Model) renderHeader(horizontalPadding int) {
-	m.sb.WriteString(style.Title.Render(m.headerText(horizontalPadding)))
-	m.sb.WriteString("\n")
-}
-
-// headerText builds the header string based on game state. It always ends with a newline and may span multiple lines.
-func (m *Model) headerText(horizontalPadding int) string {
-	var b strings.Builder
-	padString := strings.Repeat(" ", horizontalPadding)
-	if m.paused {
-		b.WriteString("\n\n")
-		b.WriteString(padString)
-		b.WriteString("PAUSED")
-	} else {
-		if m.state.GameMode == state.ModeCrazy {
-			// First line: geo/time info (restored)
-			b.WriteString(padString)
-			b.WriteString(fmt.Sprintf("Latitude: %.4f, Longitude: %.4f, Timezone: %s\n", m.state.LocationInfo.Lat, m.state.LocationInfo.Lon, m.state.LocationInfo.Timezone))
-			// Second line: mode/night/floor
-			b.WriteString(padString)
-			b.WriteString(fmt.Sprintf("Mode: %s, Night: %s  Floor: %d  Lives: %d\n", m.state.GameMode, m.state.NightOption, m.floor.Index, m.haunteed.Lives()))
-		} else {
-			// One line: mode/floor
-			b.WriteString("\n")
-			b.WriteString(padString)
-			b.WriteString(fmt.Sprintf("Mode: %s  Floor: %d  Lives: %d\n", m.state.GameMode, m.floor.Index, m.haunteed.Lives()))
-		}
-		// Final line: score/lives
-		b.WriteString(padString)
-		highScore := m.score.GetHigh()
-		if highScore > 0 {
-			b.WriteString(fmt.Sprintf("Score: %d  High Score: %d by %s", m.score.Get(), m.score.GetHigh(), m.score.GetHighNick()))
-		} else {
-			b.WriteString(fmt.Sprintf("Score: %d  High Score: —", m.score.Get()))
-		}
+// getStyledMOTD renders MOTD only when the gameplay is paused
+func (m *Model) getStyledMOTD(width int) string {
+	if !m.paused {
+		return ""
 	}
-	return b.String()
+	m.motd.SetWidth(width)
+	return m.motd.View()
 }
 
-// headerRows returns the number of terminal rows the header occupies
-func (m *Model) headerRows() int {
-	return 3
+// renderMOTD
+func (m *Model) renderMOTD(width, horizontalPadding int) {
+	m.sb.WriteString(strings.Repeat(" ", horizontalPadding))
+	m.sb.WriteString(m.getStyledMOTD(width))
 }
 
 // renderFooter
-func (m *Model) renderFooter(horizontalPadding int) {
+func (m *Model) renderFooter(width, hPadding int) {
 	m.sb.WriteString("\n")
-	m.sb.WriteString(strings.Repeat(" ", horizontalPadding))
+	m.sb.WriteString(strings.Repeat(" ", hPadding))
+	header := ""
 	switch {
 	case m.paused:
-		m.sb.WriteString(style.Footer.Render("p — resume, q — quit\n"))
+		header = "p — resume, q — quit"
 	case m.state.GameMode == state.ModeCrazy && !m.gotCrumbs && m.haunteed.Lives() > 1:
-		m.sb.WriteString(style.Footer.Render("← ↑ ↓ → — move, p — pause, c — crumbs, q — quit\n"))
+		header = "← ↑ ↓ → — move, p — pause, c — crumbs, q — quit"
 	default:
-		m.sb.WriteString(style.Footer.Render("← ↑ ↓ → — move, p — pause, q — quit\n"))
+		header = "← ↑ ↓ → — move, p — pause, q — quit"
 	}
+	m.sb.WriteString(style.Footer.Render(header))
+	m.sb.WriteString(style.Footer.Render(strings.Repeat("/", width-len([]rune(header)))))
+	m.sb.WriteString("\n")
+
 }
 
 //
