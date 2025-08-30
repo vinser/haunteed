@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vinser/haunteed/internal/render"
+	"github.com/vinser/haunteed/internal/sound"
 	"github.com/vinser/haunteed/internal/state"
 	"github.com/vinser/haunteed/internal/style"
 )
@@ -32,6 +33,7 @@ type Model struct {
 	reset      bool
 
 	selectedSetting int
+	soundManager    *sound.Manager
 }
 
 type ViewAboutMsg struct{}
@@ -70,7 +72,7 @@ func discardSettingsCmd() tea.Cmd {
 	}
 }
 
-func New(mode, crazyNight, spriteSize string, mute bool, width, height int) Model {
+func New(mode, crazyNight, spriteSize string, mute bool, width, height int, sm *sound.Manager) Model {
 	if width < lipgloss.Width(footer) {
 		width = lipgloss.Width(footer)
 	}
@@ -85,6 +87,7 @@ func New(mode, crazyNight, spriteSize string, mute bool, width, height int) Mode
 		reset:      false,
 
 		selectedSetting: 0,
+		soundManager:    sm,
 	}
 }
 
@@ -110,18 +113,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "a":
 			return m, viewAboutCmd()
 		case "s":
+			m.soundManager.Play(sound.UI_SAVE)
 			return m, saveSettingsCmd(m.mode, m.crazyNight, m.spriteSize, m.mute, m.reset)
 		case "esc":
+			m.soundManager.Play(sound.UI_CANCEL)
 			return m, discardSettingsCmd()
 		case "up":
 			if m.selectedSetting > 0 {
 				m.selectedSetting--
 			}
+			m.soundManager.Play(sound.UI_CLICK)
 			return m, nil
 		case "down":
 			if m.selectedSetting < numSettings-1 {
 				m.selectedSetting++
 			}
+			m.soundManager.Play(sound.UI_CLICK)
 			return m, nil
 		case "enter", " ":
 			if numSettings == 5 {
@@ -160,6 +167,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				}
 
 			}
+			m.soundManager.Play(sound.UI_CLICK)
 			return m, nil
 		}
 

@@ -134,9 +134,9 @@ func setSplash(st *state.State) splash.Model {
 	return model
 }
 
-func setSetup(st *state.State) setup.Model {
+func setSetup(st *state.State, sm *sound.Manager) setup.Model {
 	width, height := getDefaultWidthHeight()
-	model := setup.New(st.GameMode, st.NightOption, st.SpriteSize, st.Mute, width, height)
+	model := setup.New(st.GameMode, st.NightOption, st.SpriteSize, st.Mute, width, height, sm)
 	return model
 }
 
@@ -362,7 +362,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case splash.MakeSettingsMsg:
 			m.status = statusDoSettings
-			m.setup = setSetup(m.state)
+			m.setup = setSetup(m.state, m.soundManager)
 			m.setup.SetSize(m.termWidth, m.termHeight)
 			m.soundManager.StopListed(sound.INTRO)
 		case splash.TimedoutMsg:
@@ -407,7 +407,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case about.CloseAboutMsg:
 			m.status = statusDoSettings
-			m.setup = setSetup(m.state)
+			m.setup = setSetup(m.state, m.soundManager)
 			m.setup.SetSize(m.termWidth, m.termHeight)
 		default:
 			m.about, cmd = m.about.Update(msg)
