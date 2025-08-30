@@ -36,9 +36,7 @@ func timedoutCmd() tea.Cmd {
 }
 
 func New(width, height int) Model {
-	if width < lipgloss.Width(footer) {
-		width = lipgloss.Width(footer)
-	}
+	width = max(width, lipgloss.Width(footer))
 	return Model{
 		width:  width,
 		height: height,

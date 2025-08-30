@@ -39,9 +39,7 @@ func closeAboutCmd() tea.Cmd {
 }
 
 func New(state *state.State, width, height int) Model {
-	if width < lipgloss.Width(footer) {
-		width = lipgloss.Width(footer)
-	}
+	width = max(width, lipgloss.Width(footer))
 	bytes, err := embeddata.ReadAboutMD()
 	if err != nil {
 		log.Fatal(err)

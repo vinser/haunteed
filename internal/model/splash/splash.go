@@ -158,9 +158,7 @@ func timedoutCmd() tea.Cmd {
 }
 
 func New(state *state.State, width, height int) Model {
-	if width < lipgloss.Width(footer) {
-		width = lipgloss.Width(footer)
-	}
+	width = max(width, lipgloss.Width(footer))
 	dots := make([]bool, width)
 	for i := range dots {
 		dots[i] = true
