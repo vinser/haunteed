@@ -48,7 +48,7 @@ func New(state *state.State, width, height int) Model {
 	vp := viewport.New(width, height)
 	vp.Style = lipgloss.NewStyle()
 	const glamourGutter = 2
-	glam := glamContent(string(bytes), width, vp.Style.GetHorizontalFrameSize(), glamourGutter)
+	glam := glamContent(string(bytes), width, vp.Style.GetHorizontalFrameSize(), glamourGutter) + "\n"
 	vp.SetContent(glam)
 
 	return Model{
@@ -93,16 +93,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 const footer = "↑ ↓ — scroll, esc — back, q — quit"
 
 func (m Model) View() string {
-	return render.Page("About", m.viewport.View(), footer, m.width, m.height, m.termWidth, m.termHeight)
+	return render.Page("About", "\n"+m.viewport.View()+"\n", footer, m.width, m.height, m.termWidth, m.termHeight)
 }
 
 func glamContent(content string, width, frame, gutter int) string {
+	glamStyle := glamour.WithStandardStyle("pink")
+	glamBytes, err := embeddata.ReadGlamBytes()
+	if err == nil {
+		glamStyle = glamour.WithStylesFromJSONBytes(glamBytes)
+	}
+
 	renderWidth := width - frame - gutter
-	r, err := glamour.NewTermRenderer(
-		// glamour.WithAutoStyle(),
-		glamour.WithStandardStyle("pink"),
-		glamour.WithWordWrap(renderWidth),
-	)
+	r, err := glamour.NewTermRenderer(glamStyle, glamour.WithWordWrap(renderWidth))
 	if err != nil {
 		return content //noop
 	}

@@ -5,7 +5,7 @@ import (
 	"io/fs"
 )
 
-//go:embed about.md bosskey.json motd.json sounds.zip
+//go:embed about.md bosskey.json glam.json motd.json sounds.zip
 var embeddedFS embed.FS
 
 // FS returns the embedded filesystem with access to files in this folder.
@@ -16,6 +16,11 @@ func FS() fs.FS {
 // ReadConfig returns the contents of about.md.
 func ReadAboutMD() ([]byte, error) {
 	return embeddedFS.ReadFile("about.md")
+}
+
+// ReadGlamBytes returns the contents of glam.json.
+func ReadGlamBytes() ([]byte, error) {
+	return embeddedFS.ReadFile("glam.json")
 }
 
 // ReadBoss returns the contents of bosskey.json.
