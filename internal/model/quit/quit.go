@@ -78,5 +78,5 @@ func (m Model) View() string {
 }
 
 func (m Model) renderContent() string {
-	return "It's a pity you gave up :(\nBye!"
+	return "You escaped safely, see you next night shift!"
 }
