@@ -28,6 +28,7 @@ type HighScore struct {
 // State holds persistent game data such as high scores.
 
 type State struct {
+	Version      string             `json:"version"`       // Version of the app when the state was last saved
 	GameMode     string             `json:"game_mode"`     // Current game mode: easy, noisy or crazy
 	NightOption  string             `json:"crazy_night"`   // Night option for crazy mode: never, always or real
 	SpriteSize   string             `json:"sprite_size"`   // Sprite size: small, medium, large
@@ -153,7 +154,7 @@ var fallbackLocation = &geoip.LocationInfo{
 	TimeStamp: time.Now(),
 }
 
-func New() *State {
+func New(appVersion string) *State {
 	seeds := make(map[int]int64)
 	seeds[0] = time.Now().UnixNano()
 	loc, err := geoip.GetLocationInfo()
@@ -161,6 +162,7 @@ func New() *State {
 		loc = fallbackLocation
 	}
 	s := &State{
+		Version:      appVersion,
 		GameMode:     ModeDefault,
 		NightOption:  NightDefault,
 		SpriteSize:   SpriteDefault,
@@ -171,33 +173,33 @@ func New() *State {
 }
 
 // Load reads the state from disk, decrypts and verifies it.
-func Load() *State {
+func Load(appVersion string) *State {
 	s := &State{}
 
 	path, err := getSavePath()
 	if err != nil {
-		return New()
+		return New(appVersion)
 	}
 
 	encrypted, err := os.ReadFile(path)
 	if err != nil {
-		return New()
+		return New(appVersion)
 	}
 
 	decrypted, err := decrypt(encrypted)
 	if err != nil || len(decrypted) < 5 {
-		return New()
+		return New(appVersion)
 	}
 
 	crcStored := binary.LittleEndian.Uint32(decrypted[:4])
 	payload := decrypted[4:]
 	if crc32.ChecksumIEEE(payload) != crcStored {
-		return New()
+		return New(appVersion)
 	}
 
 	// Unmarshal into the current state struct
 	if err = json.Unmarshal(payload, s); err != nil {
-		return New() // Corrupted JSON
+		return New(appVersion) // Corrupted JSON
 	}
 
 	return s

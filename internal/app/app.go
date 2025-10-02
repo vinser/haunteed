@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -63,13 +64,13 @@ type Model struct {
 	termHeight int
 }
 
-func New() Model {
+func New(version string) Model {
 	// Configure global settings first to ensure consistent behavior.
 	geoip.SetCacheTTL(0) // Ensure fresh location data for new sessions.
 
 	soundMgr, soundInitFailed := sound.Initialize()
 
-	state := getState()
+	state := getState(version)
 	if soundInitFailed {
 		state.Mute = true
 	}
@@ -104,12 +105,16 @@ func New() Model {
 	}
 }
 
-func getState() *state.State {
-	st := state.Load()
+func getState(appVersion string) *state.State {
+	st := state.Load(appVersion)
 	if fl, ok := flags.Parse(); ok {
+		if fl.Version {
+			log.Printf("Haunteed version: %s\n", appVersion)
+			os.Exit(0)
+		}
 		if fl.Reset {
 			state.Reset()
-			return state.New()
+			return state.New(appVersion)
 		}
 
 		if fl.Mute {
@@ -383,7 +388,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = statusGameplay
 			if msg.Reset {
 				state.Reset()
-				m.state = state.New()
+				m.state = state.New(m.state.Version)
 			} else {
 				m.state.GameMode = msg.Mode
 				m.state.NightOption = msg.CrazyNight

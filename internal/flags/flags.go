@@ -8,11 +8,12 @@ import (
 
 // Flags stores the parsed command-line options
 type Flags struct {
-	Mode   string
-	Night  string
-	Sprite string
-	Mute   bool
-	Reset  bool
+	Mode    string
+	Night   string
+	Sprite  string
+	Mute    bool
+	Reset   bool
+	Version bool
 }
 
 // Parse parses command-line flags and returns the resulting config
@@ -23,6 +24,7 @@ func Parse() (*Flags, bool) {
 	var sprite string
 	var mute bool
 	var reset bool
+	var version bool
 
 	// Create custom FlagSet to allow custom usage output
 	fs := NewFlagSetWithVisit()
@@ -33,6 +35,7 @@ func Parse() (*Flags, bool) {
 	fs.StringVar(&sprite, "sprite-size", "s", "", "Sprite size: small, medium (default), or large")
 	fs.BoolVar(&mute, "mute", "m", false, "Mute all sounds")
 	fs.BoolVar(&reset, "reset", "r", false, "Reset saved progress and settings")
+	fs.BoolVar(&version, "version", "v", false, "Show application version")
 
 	// Parse command-line flags
 	fs.Parse(os.Args[1:])
@@ -72,10 +75,11 @@ func Parse() (*Flags, bool) {
 	}
 
 	return &Flags{
-		Mode:   mode,
-		Night:  night,
-		Sprite: sprite,
-		Mute:   mute,
-		Reset:  reset,
+		Mode:    mode,
+		Night:   night,
+		Sprite:  sprite,
+		Mute:    mute,
+		Reset:   reset,
+		Version: version,
 	}, true
 }
