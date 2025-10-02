@@ -15,7 +15,6 @@ import (
 
 	"github.com/gopxl/beep/v2"
 	"github.com/gopxl/beep/v2/effects"
-	"github.com/gopxl/beep/v2/speaker"
 	"github.com/gopxl/beep/v2/wav"
 	"github.com/vinser/haunteed/internal/embeddata"
 )
@@ -60,14 +59,14 @@ type Manager struct {
 	format     beep.Format
 	vol        *effects.Volume    // master volume
 	sampleVols map[string]float64 // per-sample volume in dB
+
+	backend   any           // backend-specific data
+	pulseCtrl *pulseControl // PulseAudio control for immediate stop
 }
 
 // NewManager initializes the audio system and creates a new Manager.
 func NewManager(sampleRate beep.SampleRate) (*Manager, error) {
 	bufferSize := sampleRate.N(time.Second / 10)
-	if err := speaker.Init(sampleRate, bufferSize); err != nil {
-		return nil, err
-	}
 
 	mgr := &Manager{
 		samples:    make(map[string]*beep.Buffer),
@@ -79,11 +78,19 @@ func NewManager(sampleRate beep.SampleRate) (*Manager, error) {
 	mgr.vol = &effects.Volume{
 		Streamer: mgr.mix,
 		Base:     2,
-		Volume:   0, // 0 dB
+		Volume:   0,
 		Silent:   false,
 	}
-	speaker.Play(mgr.vol)
+
+	if err := mgr.initBackend(sampleRate, bufferSize); err != nil {
+		return nil, err
+	}
+
 	return mgr, nil
+}
+
+func (mgr *Manager) Close() {
+	mgr.closeBackend()
 }
 
 func (mgr *Manager) LoadSamples() error {
@@ -338,6 +345,6 @@ func Initialize() (*Manager, bool) {
 }
 
 // Close stops the speaker and frees resources.
-func (mgr *Manager) Close() {
-	speaker.Clear()
-}
+// func (mgr *Manager) Close() {
+// 	speaker.Clear()
+// }
