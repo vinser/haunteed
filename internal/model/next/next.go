@@ -21,7 +21,7 @@ type Model struct {
 	nextUntil time.Time
 }
 
-// TickMsg is a tick message.
+// TickMsg is a tick message for periodic updates.
 type TickMsg time.Time
 
 func tick() tea.Cmd {
@@ -30,6 +30,7 @@ func tick() tea.Cmd {
 	})
 }
 
+// TimedoutMsg signals the end of the transition period.
 type TimedoutMsg struct{}
 
 func timedoutCmd() tea.Cmd {
@@ -61,8 +62,16 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if time.Now().After(m.nextUntil) {
-		return m, timedoutCmd()
+	switch msg.(type) {
+	case tea.KeyMsg:
+		// Ignore all keyboard events during the transition to prevent input queue buildup.
+		return m, nil
+	case TickMsg:
+		if time.Now().After(m.nextUntil) {
+			// Send TimedoutMsg to return to gameplay, relying on input queue reset.
+			return m, timedoutCmd()
+		}
+		return m, tick()
 	}
 	return m, tick()
 }

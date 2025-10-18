@@ -207,7 +207,8 @@ func (m Model) shouldPlayFuseSound() bool {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tickGhosts()
+	// Start a continuous ghost ticker that never stops.
+	return tea.Batch(tickGhosts())
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -221,7 +222,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "p": // Toggle pause
+		case "p", "P": // Toggle pause
 			m.paused = !m.paused
 			if m.paused {
 				m.soundManager.PlayLoopWithVolume(sound.PAUSE_GAME, 0)
@@ -230,7 +231,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.soundManager.StopListed(sound.PAUSE_GAME)
 				return m, tickGhosts() // Game is resumed, start ticking again
 			}
-		case "c":
+		case "c", "C": // Buy crumbs for one life
 			if !m.paused && !m.gotCrumbs && m.state.GameMode == state.ModeCrazy && m.haunteed.Lives() > 1 {
 				m.floor.ShowCrumbs(m.floor.Index, m.state.SpriteSize)
 				m.haunteed.LoseLife()
@@ -351,52 +352,58 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.justArrived {
 			m.justArrived = false
 		}
-	}
+	case GhostTickMsg:
+		// Always re-arm the ticker so it keeps firing
+		cmd := tickGhosts()
 
-	// update power mode
-	if m.powerMode && time.Now().After(m.powerModeUntil) {
-		m.powerMode = false
-		m.ghostTickInterval = m.floor.GhostTickInterval // reset ghost speed
-		m.score.ResetGhostStreak()
-		for _, g := range m.ghosts {
-			if g.State() == dweller.Frightened {
-				g.SetState(dweller.Chase)
+		// Skip ghost logic if game is paused
+		if m.paused {
+			return m, cmd
+		}
+
+		// update power mode
+		if m.powerMode && time.Now().After(m.powerModeUntil) {
+			m.powerMode = false
+			m.ghostTickInterval = m.floor.GhostTickInterval // reset ghost speed
+			m.score.ResetGhostStreak()
+			for _, g := range m.ghosts {
+				if g.State() == dweller.Frightened {
+					g.SetState(dweller.Chase)
+				}
 			}
 		}
-	}
 
-	switch msg.(type) {
-	case GhostTickMsg:
 		if time.Since(m.lastGhostMove) >= m.ghostTickInterval {
 			m.ghostController.Update(m.ghosts)
 			dweller.MoveGhosts(m.ghosts, m.floor, m.powerMode, m.haunteed.Pos(), m.haunteed.Dir())
 			m.lastGhostMove = time.Now()
 		}
-	}
 
-	// check haunteed collisions with ghosts
-	htPos := m.haunteed.Pos()
-	for _, g := range m.ghosts {
-		if htPos == g.Pos() {
-			switch g.State() {
-			case dweller.Frightened: // eat the ghost
-				m.soundManager.Play(sound.KILL_GHOST)
-				m.score.AddGhostPoints()
-				g.SetState(dweller.Eaten)
-			case dweller.Chase: // lose a life
-				m.haunteed.LoseLife()
-				if m.haunteed.IsDead() { // game over
-					score := m.score.Get()
-					return m, gameOverCmd(score)
+		// check haunteed collisions with ghosts
+		htPos := m.haunteed.Pos()
+		for _, g := range m.ghosts {
+			if htPos == g.Pos() {
+				switch g.State() {
+				case dweller.Frightened: // eat the ghost
+					m.soundManager.Play(sound.KILL_GHOST)
+					m.score.AddGhostPoints()
+					g.SetState(dweller.Eaten)
+				case dweller.Chase: // lose a life
+					m.haunteed.LoseLife()
+					if m.haunteed.IsDead() { // game over
+						score := m.score.Get()
+						return m, gameOverCmd(score)
+					}
+					// enter respawn mode
+					m.soundManager.PlayWithVolume(sound.LOSE_LIFE, 2)
+					return m, respawnCmd(m.haunteed.Lives())
 				}
-				// enter respawn mode
-				m.soundManager.PlayWithVolume(sound.LOSE_LIFE, 2)
-				return m, respawnCmd(m.haunteed.Lives())
 			}
 		}
-	}
 
-	return m, tickGhosts()
+		return m, cmd
+	}
+	return m, nil
 }
 
 func (m Model) Haunteed() *dweller.Haunteed {
