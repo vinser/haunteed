@@ -35,7 +35,9 @@ This project is not affiliated with Pac-Man, Ghostbusters, or your employer’s 
 It’s just for fun.  
 Play it during night shifts, but don’t let the monitoring alerts pile up.  
 
-**P.S.** In `crazy` mode with `real` enabled, the game will ping http://ip-api.com to guess your location. I promise it’s only for night-shift math, not for selling your soul.
+**P.S.** In `crazy` mode with `real` enabled, the game will ping http://ip-api.com to guess your location. I promise it’s only for night-shift math, not for selling your soul.  
+
+**P.P.S.** Some say the secrets to the high salary are hidden in the source code. Others just read the damn MOTD.  
 
 ## License
 MIT
