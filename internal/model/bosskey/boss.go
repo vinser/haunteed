@@ -8,15 +8,17 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vinser/haunteed/internal/embeddata"
+	"github.com/vinser/haunteed/internal/sound"
 )
 
 // Model describe app states
 type Model struct {
-	msgs      []string
-	bossLines []string
-	rng       *rand.Rand
-	width     int
-	height    int
+	soundManager *sound.Manager
+	msgs         []string
+	bossLines    []string
+	rng          *rand.Rand
+	width        int
+	height       int
 }
 
 // TickMsg refreshes boss key
@@ -26,7 +28,8 @@ type bossMessages struct {
 	Tips []string `json:"tips"`
 }
 
-func New() Model {
+func New(sm *sound.Manager) Model {
+	sm.StopAll()
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Read and parse MOTD messages
@@ -43,9 +46,10 @@ func New() Model {
 	}
 
 	return Model{
-		msgs:      msgs,
-		bossLines: randomLines(msgs...),
-		rng:       rng,
+		soundManager: sm,
+		msgs:         msgs,
+		bossLines:    randomLines(msgs...),
+		rng:          rng,
 	}
 }
 
@@ -70,6 +74,7 @@ func (m *Model) SetSize(width, height int) {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg.(type) {
 	case TickMsg:
+		m.soundManager.Play(sound.STEP)
 		m.bossLines = randomLines(m.msgs...) // update lines
 		return m, Tick()
 	}

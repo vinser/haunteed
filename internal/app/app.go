@@ -81,7 +81,6 @@ func New(version string) Model {
 	}
 
 	splash := setSplash(state)
-	soundMgr.PlayLoop(sound.INTRO)
 	floorCache := make(map[int]*floor.Floor)
 	initialFloor := getFloor(0, state, floorCache, nil, nil)
 	startPos := dweller.Position{X: initialFloor.Maze.Start().X, Y: initialFloor.Maze.Start().Y}
@@ -101,7 +100,7 @@ func New(version string) Model {
 		floor:           initialFloor,
 		score:           score,
 		splash:          splash,
-		bosskey:         bosskey.New(),
+		bosskey:         bosskey.New(soundMgr),
 	}
 }
 
@@ -283,6 +282,7 @@ func getMazeDimensions(gameMode string) (width, height int) {
 }
 
 func (m Model) Init() tea.Cmd {
+	m.soundManager.PlayLoop(sound.INTRO)
 	return tea.Batch(m.splash.Init(), m.over.Init(), tea.DisableMouse)
 }
 
@@ -290,9 +290,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.bosskeyVisible {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
-			if msg.String() == "b" {
+			if msg.String() == "b" || msg.String() == "B" {
 				m.bosskeyVisible = false
-				return m, nil
+				switch m.status {
+				case statusStartSplash:
+					m.soundManager.PlayLoop(sound.INTRO)
+					return m, m.splash.Init()
+				case statusDoSettings:
+					return m, m.setup.Init()
+				case statusAbout:
+					return m, m.about.Init()
+				case statusGameplay:
+					return m, m.play.Init()
+				case statusFloorIntro:
+					return m, m.next.Init()
+				case statusRespawning:
+					return m, m.respawn.Init()
+				case statusGameOver:
+					m.soundManager.PlayLoop(sound.INTRO)
+					return m, m.over.Init()
+				case statusQuitting:
+					return m, m.quit.Init()
+				default:
+					return m, nil
+				}
 			}
 		case bosskey.TickMsg:
 			newBosskey, cmd := m.bosskey.Update(msg)
@@ -308,17 +329,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "b":
+		case "b", "B":
 			m.bosskeyVisible = true
 			m.bosskey.SetSize(m.termWidth, m.termHeight)
 			m.soundManager.StopAll()
 			return m, m.bosskey.Init()
-		case "ctrl+c", "q": // quit all app models
+		case "ctrl+c", "q", "Q": // quit all app models
 			m.status = statusQuitting // Set status to show quit message
 			m.quit = m.setQuit()
 			m.quit.SetSize(m.termWidth, m.termHeight)
 			return m, m.quit.Init()
-		case "m": // mute/unmute
+		case "m", "M": // mute/unmute
 			m.state.Mute = !m.state.Mute
 			if m.state.Mute {
 				m.soundManager.Mute()
@@ -374,6 +395,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = statusGameplay
 			m.resetPlayModel()
 			m.soundManager.StopListed(sound.INTRO)
+			cmd = m.play.Init()
 		default:
 			m.splash, cmd = m.splash.Update(msg)
 		}
@@ -401,9 +423,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.soundManager.Unmute()
 			}
 			m.resetForNewGame()
+			cmd = m.play.Init()
 		case setup.DiscardSettingsMsg:
 			m.status = statusGameplay
 			m.resetPlayModel()
+			cmd = m.play.Init()
 		default:
 			m.setup, cmd = m.setup.Update(msg)
 		}
@@ -451,12 +475,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = statusRespawning
 			m.respawn = setRespawn(m.state, msg.Lives)
 			m.respawn.SetSize(m.termWidth, m.termHeight)
+			cmd = m.respawn.Init()
 		case play.GameOverMsg:
 			m.status = statusGameOver
 			score := msg.Score
 			m.over = m.setGameOver(score)
 			m.over.SetSize(m.termWidth, m.termHeight)
-			cmds = append(cmds, m.over.Init())
+			cmd = m.over.Init()
 		case play.VisibilityToggledMsg:
 			m.floorVisibility[msg.FloorIndex] = msg.IsVisible
 			return m, nil // State updated, no further action needed
@@ -469,6 +494,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case next.TimedoutMsg:
 			m.resetPlayModel()
 			m.status = statusGameplay
+			cmd = m.play.Init()
 		default:
 			m.next, cmd = m.next.Update(msg)
 		}
@@ -476,8 +502,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusRespawning:
 		switch msg := msg.(type) {
 		case respawn.TimedoutMsg:
-			m.resetPlayModelForRespawn()
+			m.resetPlayModel()
+			m.haunteed.SetPos(m.haunteed.Home())
 			m.status = statusGameplay
+			cmd = m.play.Init()
 		default:
 			m.respawn, cmd = m.respawn.Update(msg)
 		}
@@ -492,6 +520,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case over.PlayAgainMsg:
 			m.soundManager.StopListed(sound.INTRO)
 			m.resetForNewGame()
+			m.status = statusGameplay
+			cmd = m.play.Init()
 		case over.QuitGameMsg:
 			m.status = statusQuitting
 			m.soundManager.StopListed(sound.INTRO)
@@ -525,7 +555,6 @@ func (m *Model) resetForNewGame() {
 		m.score.SetNick(highScores[0].Nick)
 	}
 	m.resetPlayModel()
-	m.status = statusGameplay
 }
 
 func (m *Model) resetPlayModel() {
