@@ -795,7 +795,11 @@ func (m *Model) renderFooter(width, hPadding int) {
 		header = "← ↑ ↓ → — move, p — pause, q — quit"
 	}
 	m.sb.WriteString(style.Footer.Render(header))
-	m.sb.WriteString(style.Footer.Render(strings.Repeat("/", width-len([]rune(header)))))
+	repeatCount := width - len([]rune(header))
+	if repeatCount < 0 {
+		repeatCount = 0
+	}
+	m.sb.WriteString(style.Footer.Render(strings.Repeat("/", repeatCount)))
 	m.sb.WriteString("\n")
 
 }
