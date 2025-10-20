@@ -417,6 +417,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state.SpriteSize = msg.SpriteSize
 				m.state.Mute = msg.Mute
 			}
+			if err := m.state.Save(); err != nil {
+				log.Fatal(err)
+			}
 			if m.state.Mute {
 				m.soundManager.Mute()
 			} else {

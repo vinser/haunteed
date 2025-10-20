@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/vinser/haunteed/internal/geoip"
 	"github.com/vinser/haunteed/internal/render"
 	"github.com/vinser/haunteed/internal/sound"
 	"github.com/vinser/haunteed/internal/state"
@@ -224,16 +225,45 @@ func (m Model) renderOptions() string {
 	type option struct {
 		label string
 		value string
+		key   int
 	}
 
-	options := []option{{"Game mode", m.mode}}
-	if m.mode == state.ModeCrazy {
-		options = append(options, option{"Night shadows", m.crazyNight})
+	// Descriptions for each logical setting (by key)
+	descriptions := map[int]string{
+		selectedMode: `Choose your level of despair:
+- easy: peaceful night, maybe too peaceful
+- noisy: servers groan and fans whisper
+- crazy: reality melts with uptime and caffeine.`,
+
+		selectedCrazyNight: `Controls how much the upper floors fear the dark:
+- never: eternal daylight — ignorance is bliss
+- always: permanent night — the basement won
+- real: follows your location — day, dusk, night, regret, repeat.`,
+
+		selectedSpriteSize: `How big the horrors appear:
+- small: plausible deniability
+- medium: comfortably terrifying
+- large: face-to-face with your mistakes.`,
+
+		selectedMute: `Silence the datacenter… or at least pretend to.
+Ghosts don’t need speakers anyway.`,
+
+		selectedReset: `Erase your sins and start another night shift.
+Heads up — ghosts never forget.`,
 	}
-	options = append(options, option{"Sprite size", m.spriteSize})
-	options = append(options, option{"Mute all sounds", checkBox(m.mute)})
-	options = append(options, option{"Reset progress", checkBox(m.reset)})
-	// Calculate max widths and format string
+
+	// Build option list based on current mode
+	options := []option{{"Game mode", m.mode, selectedMode}}
+	if m.mode == state.ModeCrazy {
+		options = append(options, option{"Night shadows", m.crazyNight, selectedCrazyNight})
+	}
+	options = append(options,
+		option{"Sprite size", m.spriteSize, selectedSpriteSize},
+		option{"Mute all sounds", checkBox(m.mute), selectedMute},
+		option{"Reset progress", checkBox(m.reset), selectedReset},
+	)
+
+	// Calculate maximum label/value widths for aligned layout
 	maxLabel, maxValue := 10, 10
 	for _, row := range options {
 		if len(row.label) > maxLabel {
@@ -246,6 +276,8 @@ func (m Model) renderOptions() string {
 	format := fmt.Sprintf("%%-2s%%-%ds:%%%ds", maxLabel, maxValue+2)
 
 	var b strings.Builder
+
+	// Render options
 	for i, opt := range options {
 		prefix := "  "
 		if i == m.selectedSetting {
@@ -259,6 +291,55 @@ func (m Model) renderOptions() string {
 		}
 		b.WriteString("\n")
 	}
+
+	// Gap between options and description
+	gapLines := 3
+	if m.mode == state.ModeCrazy {
+		gapLines = 2
+	}
+	b.WriteString(strings.Repeat("\n", gapLines))
+
+	// Determine which option is currently selected and show its description
+	selectedKey := options[m.selectedSetting].key
+	desc := descriptions[selectedKey]
+	// If "Night shadows" option is selected and set to "real", check network-based location
+	if selectedKey == selectedCrazyNight && m.crazyNight == "real" {
+		loc, err := geoip.GetLocationInfo()
+		if err != nil {
+			// Network or lookup failed — fallback to Kansas City
+			desc = "Alert: No network detected.\nYou've been placed in the endless corn maze — Kansas City, MO (CST).\nFind your way out before your DNS expires."
+		} else if loc != nil {
+			// Successful lookup — replace description with a ghostly message
+			desc = fmt.Sprintf(
+				"The ghosts have found your datacenter in %s, %s.\nThey’ve synced their shifts with your sunrise — good luck escaping daylight savings.",
+				loc.City, loc.Country,
+			)
+		}
+	}
+	descLines := 0
+	if desc != "" {
+		// Simple ghostly style (gray italic text)
+		descText := style.SetupDescription.Render(desc)
+		b.WriteString(descText)
+		descLines = len(strings.Split(desc, "\n"))
+	}
+
+	// Compute the maximum number of description lines
+	maxDescLines := 0
+	for _, d := range descriptions {
+		lines := len(strings.Split(d, "\n"))
+		if lines > maxDescLines {
+			maxDescLines = lines
+		}
+	}
+
+	// Normalize total height (consistent view regardless of mode)
+	maxTotalLines := len(options) + gapLines + maxDescLines
+	currentLines := len(options) + gapLines + descLines
+	if padding := maxTotalLines - currentLines; padding > 0 {
+		b.WriteString(strings.Repeat("\n", padding))
+	}
+
 	return b.String()
 }
 

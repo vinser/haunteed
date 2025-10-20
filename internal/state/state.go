@@ -144,13 +144,13 @@ func (s *State) Save() error {
 }
 
 var fallbackLocation = &geoip.LocationInfo{
-	Continent: "Europe",
-	Country:   "The Netherlands",
-	City:      "Amsterdam",
-	Lat:       52.3728,
-	Lon:       4.88805,
-	Timezone:  "Europe/Amsterdam",
-	IP:        "193.0.11.51",
+	Continent: "North America",
+	Country:   "United States",
+	City:      "Kansas City",
+	Lat:       39.1374,
+	Lon:       -94.5786,
+	Timezone:  "America/Chicago",
+	IP:        "69.197.160.242",
 	TimeStamp: time.Now(),
 }
 
