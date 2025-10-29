@@ -1,0 +1,58 @@
+name: haunteed
+base: core24
+version: 1.1.0
+summary: TUI Night-Shift Horror for Sysadmins
+description: |
+  Haunteed is a love letter to that special feeling of being the only human in a data center at 3 AM.
+  It's not a simulation, it's not serious—it's a retro-styled timekiller while your scripts run or your backups fail spectacularly.
+
+license: MIT
+
+title: Haunteed (The Sysadmin Horror Game)
+contact: https://github.com/vinser/haunteed/issues
+source-code: https://github.com/vinser/haunteed
+# website: https://github.com/vinser/haunteed
+issues: https://github.com/vinser/haunteed/issues
+
+icon: snap/gui/icon.png
+
+platforms:
+  arm64:
+    build-on: [arm64, amd64]
+    build-for: [arm64]
+  amd64:
+    build-on: [arm64, amd64]
+    build-for: [amd64]
+
+grade: stable
+confinement: strict
+
+apps:
+  haunteed:
+    command: haunteed
+    command-chain:
+      - bin/setup-pulse.sh
+    plugs:
+      - pulseaudio
+      - network
+      - home
+    environment:
+      TERM: xterm-256color
+
+parts:
+  haunteed:
+    plugin: go
+    source: .
+    build-snaps:
+      - go/1.23/stable
+    override-build: |
+      install -Dm755 ./snap/bin/setup-pulse.sh "$CRAFT_PART_INSTALL/bin/setup-pulse.sh"
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        arm64)  export GOARCH=arm64 ;;
+        amd64)  export GOARCH=amd64 ;;
+        *) echo "Unsupported architecture: $CRAFT_ARCH_BUILD_FOR" >&2; exit 1 ;;
+      esac
+      export GOOS=linux
+      export CGO_ENABLED=0
+      go build -v -ldflags "-X 'main.version=$CRAFT_PROJECT_VERSION'" \
+        -o "$CRAFT_PART_INSTALL/haunteed" ./cmd/haunteed
