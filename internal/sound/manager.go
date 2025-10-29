@@ -83,17 +83,24 @@ func NewManager(sampleRate beep.SampleRate) (*Manager, error) {
 	}
 
 	if err := mgr.initBackend(sampleRate, bufferSize); err != nil {
-		return nil, err
+		mgr.vol.Silent = true
+		return mgr, err
 	}
 
 	return mgr, nil
 }
 
 func (mgr *Manager) Close() {
+	if mgr == nil {
+		return
+	}
 	mgr.closeBackend()
 }
 
 func (mgr *Manager) LoadSamples() error {
+	if mgr == nil {
+		return errors.New("sound manager is nil")
+	}
 	// Open the embedded ZIP archive
 	soundsZip, err := embeddata.ReadSoundsZip()
 	if err != nil {
@@ -135,6 +142,9 @@ func (mgr *Manager) LoadSamples() error {
 
 // LoadWAV loads and resamples a WAV sample into memory.
 func (mgr *Manager) LoadWAV(name string, data []byte) error {
+	if mgr == nil {
+		return errors.New("sound manager is nil")
+	}
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 
@@ -154,6 +164,9 @@ func (mgr *Manager) LoadWAV(name string, data []byte) error {
 }
 
 func (mgr *Manager) SetMasterVolume(db float64) {
+	if mgr == nil {
+		return
+	}
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 	if mgr.vol != nil {
@@ -162,6 +175,9 @@ func (mgr *Manager) SetMasterVolume(db float64) {
 }
 
 func (mgr *Manager) SetVolume(name string, db float64) {
+	if mgr == nil {
+		return
+	}
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 	mgr.sampleVols[name] = db
@@ -247,6 +263,9 @@ func (mgr *Manager) PlayLoopWithVolume(name string, db float64) error {
 // MakeSequence combines the given samples into a single sequence sample and adds it to the manager.
 // The sequence can then be played/looped/stopped by its name like any other sample.
 func (mgr *Manager) MakeSequence(seqName string, sampleNames ...string) error {
+	if mgr == nil {
+		return errors.New("Ssound manager is nil")
+	}
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 
@@ -309,6 +328,9 @@ func (mgr *Manager) StopListed(names ...string) {
 
 // StopAll halts playback of all currently playing samples.
 func (mgr *Manager) StopAll() {
+	if mgr == nil {
+		return
+	}
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 	for _, ctrl := range mgr.ctrl {
@@ -319,6 +341,9 @@ func (mgr *Manager) StopAll() {
 
 // Mute disables all audio output.
 func (mgr *Manager) Mute() {
+	if mgr == nil {
+		return
+	}
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 	mgr.vol.Silent = true
@@ -326,6 +351,9 @@ func (mgr *Manager) Mute() {
 
 // Unmute enables audio output.
 func (mgr *Manager) Unmute() {
+	if mgr == nil {
+		return
+	}
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 	mgr.vol.Silent = false
