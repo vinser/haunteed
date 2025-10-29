@@ -1,6 +1,8 @@
 /assets/
 /config/
 /_playground/
+/bin/
+/snap-builds/
 /sounds/
 TODO
 AGENT.md
